@@ -3,7 +3,7 @@
 // Development-only design preview (excluded from production builds via the
 // `dev.tsx` page extension). Renders real shell/onboarding/dashboard components
 // with fixture sessions and data so layouts can be checked without signing in.
-// Usage: /preview/?screen=signin|onboarding|dashboard|budget|kit|modal
+// Usage: /preview/?screen=signin|onboarding|dashboard|budget|notes|kit|modal
 
 import type { User } from "firebase/auth";
 import {
@@ -22,6 +22,8 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { InteriorFrame, Onboarding, SignIn } from "@/components/AppShell";
 import { BudgetView } from "@/components/budget/BudgetView";
+import { NotesView } from "@/components/notes/NotesView";
+import { Timestamp } from "firebase/firestore";
 import { DashboardView } from "@/components/DashboardView";
 import {
   SessionContext,
@@ -41,7 +43,7 @@ import {
   Select,
   Textarea,
 } from "@/components/ui";
-import type { InventoryItem, Purchase, Task } from "@/lib/types";
+import type { InventoryItem, Note, Purchase, Task } from "@/lib/types";
 
 const TODAY = "2026-10-30";
 const user = {
@@ -250,6 +252,40 @@ const BUDGET: Purchase[] = [
   },
 ];
 
+const at = (iso: string) => Timestamp.fromDate(new Date(iso));
+const NOTES: Note[] = [
+  {
+    id: "n1",
+    content:
+      "Ask the neighbors whether anyone on the street has a generator we could share during a long outage.",
+    createdBy: "preview",
+    createdByName: "Preview Member",
+    createdAt: at("2026-10-29T18:20:00"),
+    updatedAt: at("2026-10-29T18:20:00"),
+    linkedTaskIds: [],
+  },
+  {
+    id: "n2",
+    content:
+      "Research long-term water storage: 55-gallon barrels vs. stackable 5-gallon containers vs. a bathtub bladder for short notice.\n\nThings to compare:\n- space in the garage and basement\n- how often each needs rotating\n- treatment (bleach vs. tablets)\n- whether a hand pump or spigot is needed\n\nAlso look at rain catchment for non-potable use (garden, flushing).",
+    createdBy: "partner",
+    createdByName: "Jordan",
+    createdAt: at("2026-10-27T09:05:00"),
+    updatedAt: at("2026-10-28T07:40:00"),
+    linkedTaskIds: [TASKS[0].id, "deleted-task"],
+  },
+  {
+    id: "n3",
+    content:
+      "Kids' go-bags: add a small flashlight and a printed contact card to each.",
+    createdBy: "preview",
+    createdByName: "Preview Member",
+    createdAt: at("2026-10-20T21:12:00"),
+    updatedAt: at("2026-10-20T21:12:00"),
+    linkedTaskIds: [TASKS[5].id],
+  },
+];
+
 function Session({
   state,
   children,
@@ -384,6 +420,23 @@ function Screen() {
               tasks={TASKS}
               purchases={BUDGET}
               today={TODAY}
+            />
+          </InteriorFrame>
+        </Session>
+      );
+    case "notes":
+      return (
+        <Session state={ready}>
+          <InteriorFrame>
+            <NotesView
+              notes={NOTES}
+              loading={false}
+              loadingMore={false}
+              hasMore={false}
+              onLoadMore={() => undefined}
+              error={null}
+              tasks={TASKS}
+              tasksLoading={false}
             />
           </InteriorFrame>
         </Session>

@@ -9,6 +9,7 @@ describe("navigation config", () => {
       "Inventory",
       "Tasks",
       "Budget",
+      "Notes",
       "Household",
     ]);
     expect(labels).not.toContain("Purchases");
@@ -25,5 +26,10 @@ describe("navigation config", () => {
     expect(isActive("/inventory", "/inventory/")).toBe(true);
     expect(isActive("/inventory/", "/tasks/")).toBe(false);
     expect(currentNav("/unknown")).toBeUndefined();
+  });
+
+  it("adds Notes at /notes between Budget and Household", () => {
+    expect(NAV.find((n) => n.label === "Notes")?.href).toBe("/notes/");
+    expect(currentNav("/notes")?.label).toBe("Notes");
   });
 });

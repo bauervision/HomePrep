@@ -1,17 +1,11 @@
 "use client";
 
-import { Plus, Save, Trash2 } from "lucide-react";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
-import { useMemo, useState, type FormEvent } from "react";
+import { Plus } from "lucide-react";
+import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { useMemo, useState } from "react";
 import { Comments } from "@/components/Comments";
 import { useHousehold } from "@/components/SessionProvider";
+import { TaskForm } from "@/components/TaskForm";
 import {
   Badge,
   Button,
@@ -19,204 +13,34 @@ import {
   cx,
   Empty,
   ErrorText,
-  Field,
-  Input,
   Modal,
   PageHeader,
   Select,
-  Textarea,
 } from "@/components/ui";
 import { sortTasks, useTasks } from "@/lib/data";
 import { db } from "@/lib/firebase";
 import { MILESTONES } from "@/lib/readiness";
 import {
-  CATEGORIES,
   PRIORITY_LABEL,
   TASK_STATUS_LABEL,
-  type Category,
   type MilestoneKey,
-  type Priority,
   type Task,
   type TaskStatus,
 } from "@/lib/types";
 
-type Draft = Pick<
-  Task,
-  "title" | "notes" | "category" | "milestone" | "priority" | "status"
->;
-
 const PRIORITY_TONE = { 1: "bad", 2: "warn", 3: "neutral" } as const;
-
-function TaskForm({
-  initial,
-  onDone,
-}: {
-  initial: Task | null;
-  onDone: () => void;
-}) {
-  const { household } = useHousehold();
-  const [d, setD] = useState<Draft>(() =>
-    initial
-      ? {
-          title: initial.title,
-          notes: initial.notes,
-          category: initial.category,
-          milestone: initial.milestone,
-          priority: initial.priority,
-          status: initial.status,
-        }
-      : {
-          title: "",
-          notes: "",
-          category: "Water",
-          milestone: "72h",
-          priority: 2,
-          status: "todo",
-        },
-  );
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
-    setD((p) => ({ ...p, [k]: v }));
-  const col = collection(db(), "households", household.id, "tasks");
-
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    const payload = {
-      ...d,
-      title: d.title.trim(),
-      notes: d.notes.trim(),
-      updatedAt: serverTimestamp(),
-    };
-    try {
-      if (initial) await updateDoc(doc(col, initial.id), payload);
-      else await addDoc(col, { ...payload, createdAt: serverTimestamp() });
-      onDone();
-    } catch (err) {
-      setError((err as Error).message);
-      setBusy(false);
-    }
-  }
-
-  async function remove() {
-    if (!initial || !confirm(`Delete task "${initial.title}"?`)) return;
-    setBusy(true);
-    try {
-      await deleteDoc(doc(col, initial.id));
-      onDone();
-    } catch (err) {
-      setError((err as Error).message);
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form onSubmit={save} className="space-y-3">
-      <Field label="Task">
-        <Input
-          required
-          maxLength={160}
-          value={d.title}
-          onChange={(e) => set("title", e.target.value)}
-        />
-      </Field>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="Status">
-          <Select
-            value={d.status}
-            onChange={(e) => set("status", e.target.value as TaskStatus)}
-          >
-            {Object.entries(TASK_STATUS_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Priority">
-          <Select
-            value={d.priority}
-            onChange={(e) =>
-              set("priority", Number(e.target.value) as Priority)
-            }
-          >
-            {Object.entries(PRIORITY_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Category">
-          <Select
-            value={d.category}
-            onChange={(e) => set("category", e.target.value as Category)}
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Milestone">
-          <Select
-            value={d.milestone}
-            onChange={(e) => set("milestone", e.target.value as MilestoneKey)}
-          >
-            {MILESTONES.map((m) => (
-              <option key={m.key} value={m.key}>
-                {m.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      </div>
-      <Field label="Notes">
-        <Textarea
-          rows={3}
-          maxLength={2000}
-          value={d.notes}
-          onChange={(e) => set("notes", e.target.value)}
-        />
-      </Field>
-      <ErrorText>{error}</ErrorText>
-      <div className="flex items-center justify-between gap-2">
-        {initial ? (
-          <Button
-            variant="danger"
-            icon={Trash2}
-            onClick={remove}
-            disabled={busy}
-          >
-            Delete
-          </Button>
-        ) : (
-          <span />
-        )}
-        <div className="flex gap-2">
-          <Button onClick={onDone}>Cancel</Button>
-          <Button
-            type="submit"
-            variant={initial ? "emerald" : "copper"}
-            icon={initial ? Save : Plus}
-            loading={busy}
-            disabled={!d.title.trim()}
-          >
-            {initial ? "Save" : "Add task"}
-          </Button>
-        </div>
-      </div>
-    </form>
-  );
-}
 
 export default function TasksPage() {
   const { household } = useHousehold();
   const { data, loading, error } = useTasks();
   const [milestone, setMilestone] = useState<MilestoneKey | "all">("all");
   const [showDone, setShowDone] = useState(true);
-  const [editing, setEditing] = useState<string | "new" | null>(null);
+  // Deep link: /tasks/?task=<id> opens that task (used by linked notes).
+  const [editing, setEditing] = useState<string | "new" | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("task"),
+  );
   const [rowError, setRowError] = useState<string | null>(null);
 
   const rows = useMemo(
@@ -336,7 +160,8 @@ export default function TasksPage() {
         )}
       </Card>
       <Modal
-        open={editing !== null}
+        // A deep-linked task that no longer exists simply leaves the modal closed.
+        open={editing === "new" || current !== null}
         onClose={() => setEditing(null)}
         title={editing === "new" ? "New task" : "Task"}
         wide

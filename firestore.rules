@@ -179,6 +179,35 @@ service cloud.firestore {
           allow update, delete: if false;
         }
       }
+
+      // Household notes. Any member may read, edit, delete and link tasks;
+      // authorship and creation time are fixed at creation.
+      match /notes/{noteId} {
+        function validNote(d) {
+          return d.keys().hasOnly(
+              ['content', 'createdBy', 'createdByName', 'createdAt', 'updatedAt', 'linkedTaskIds'])
+            && str(d.content, 1, 5000)
+            && d.createdByName is string
+            && d.createdByName.size() <= 120
+            && d.linkedTaskIds is list
+            && d.linkedTaskIds.size() <= 200;
+        }
+
+        allow read, delete: if isMember(hid);
+
+        allow create: if isMember(hid)
+          && validNote(request.resource.data)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.linkedTaskIds.size() == 0;
+
+        allow update: if isMember(hid)
+          && validNote(request.resource.data)
+          && unchanged(['createdBy', 'createdByName', 'createdAt'])
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedAt'])
+            || request.resource.data.updatedAt == request.time);
+      }
     }
   }
 }

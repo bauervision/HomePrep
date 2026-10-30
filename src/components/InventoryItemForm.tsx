@@ -52,6 +52,7 @@ export function InventoryFields({
         <Input
           required
           autoFocus={autoFocus}
+          data-autofocus={autoFocus || undefined}
           maxLength={120}
           value={d.name}
           onChange={(e) => set("name", e.target.value)}

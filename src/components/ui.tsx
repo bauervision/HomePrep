@@ -252,7 +252,12 @@ export function Modal({
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
+    if (open && !d.open) {
+      d.showModal();
+      // showModal() focuses the first focusable element (the close button);
+      // content can opt a field in with data-autofocus instead.
+      d.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+    }
     if (!open && d.open) d.close();
   }, [open]);
   return (
@@ -266,7 +271,7 @@ export function Modal({
       )}
     >
       {open && (
-        <div className="flex max-h-[85vh] flex-col">
+        <div className="flex max-h-[85dvh] flex-col">
           <header className="flex items-center justify-between border-b border-line px-4 py-3">
             <h2 className="text-xs font-semibold tracking-[0.16em] text-ivory uppercase">
               {title}

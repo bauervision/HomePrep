@@ -59,6 +59,7 @@ describe("MobileNav", () => {
       "Inventory",
       "Tasks",
       "Budget",
+      "Notes",
       "Household",
     ]);
     expect(within(nav).queryByText("Purchases")).toBeNull();
@@ -104,6 +105,18 @@ describe("MobileNav", () => {
     act(() => rerender(<MobileNav pathname="/tasks/" onSignOut={() => {}} />));
     expect(screen.queryByRole("navigation")).toBeNull();
     expect(trigger().textContent).toContain("Tasks");
+  });
+
+  it("includes Notes and highlights it on the Notes route", () => {
+    render(<MobileNav pathname="/notes/" onSignOut={() => {}} />);
+    expect(trigger().textContent).toContain("Notes");
+    fireEvent.click(trigger());
+    const notes = screen.getByRole("link", { name: "Notes" });
+    expect(notes.getAttribute("href")).toBe("/notes/");
+    expect(notes.getAttribute("aria-current")).toBe("page");
+    expect(document.activeElement).toBe(notes);
+    fireEvent.click(notes);
+    expect(screen.queryByRole("navigation")).toBeNull();
   });
 
   it("supports arrow-key movement between items", () => {

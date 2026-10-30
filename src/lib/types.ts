@@ -84,6 +84,8 @@ export interface Task {
   priority: Priority;
   status: TaskStatus;
   seedKey?: string;
+  /** Note this task was created from, if any (may point to a deleted note). */
+  sourceNoteId?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -133,4 +135,15 @@ export interface Invite {
   expiresAt: Timestamp;
   usedBy: string | null;
   usedAt: Timestamp | null;
+}
+
+export interface Note {
+  id: string;
+  content: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
+  /** Tasks created from this note (IDs may refer to since-deleted tasks). */
+  linkedTaskIds: string[];
 }

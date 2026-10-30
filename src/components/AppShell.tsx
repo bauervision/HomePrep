@@ -8,6 +8,7 @@ import { createHousehold, JoinError, joinWithInvite } from "@/lib/household";
 import { Logo, LogoMark } from "./brand/Logo";
 import { WildernessBackdrop } from "./brand/WildernessBackdrop";
 import { MobileNav } from "./MobileNav";
+import { QuickNote } from "./notes/QuickNote";
 import { isActive, NAV } from "./nav";
 import { useSession } from "./SessionProvider";
 import { Button, CardTitle, cx, ErrorText, Field, Input } from "./ui";
@@ -294,9 +295,11 @@ export function TopBar() {
             );
           })}
         </nav>
+        <span className="flex-1 lg:hidden" />
         <span className="hidden max-w-40 truncate text-xs text-slate xl:inline">
           {state.household.name}
         </span>
+        <QuickNote />
         <Button
           variant="ghost"
           size="sm"
@@ -306,7 +309,6 @@ export function TopBar() {
         >
           Sign out
         </Button>
-        <span className="flex-1 lg:hidden" />
         <div className="lg:hidden">
           <MobileNav
             pathname={pathname}

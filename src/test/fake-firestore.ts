@@ -27,6 +27,7 @@ interface Query {
   path: string;
   orderBy: { field: string; dir: "asc" | "desc" }[];
   where: { field: string; op: string; value: unknown }[];
+  limit?: number;
 }
 type Target = DocRef | ColRef | Query;
 
@@ -39,6 +40,9 @@ let autoId = 0;
 class FakeTimestamp {
   constructor(private ms: number) {}
   toMillis() {
+    return this.ms;
+  }
+  valueOf() {
     return this.ms;
   }
   toDate() {
@@ -109,6 +113,7 @@ function collectionDocs(q: Query) {
       return o.dir === "desc" ? -c : c;
     });
   }
+  if (q.limit != null) docs = docs.slice(0, q.limit);
   return docs.map((d) => ({ id: d.id, data: () => structuredClone(d.v) }));
 }
 
@@ -141,6 +146,7 @@ export const firestoreModule = {
     field,
     dir,
   }),
+  limit: (n: number) => ({ kind: "limit", n }),
   where: (field: string, op: string, value: unknown) => ({
     kind: "where",
     field,
@@ -163,6 +169,11 @@ export const firestoreModule = {
           (c) => c.kind === "where",
         ) as unknown as Query["where"]),
       ],
+      limit:
+        (
+          constraints.find((c) => c.kind === "limit") as
+            { n: number } | undefined
+        )?.n ?? q.limit,
     };
   },
   onSnapshot: (target: Target, ...args: unknown[]) => {

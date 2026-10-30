@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   ListChecks,
+  NotebookText,
   Package,
   ShoppingCart,
   Users,
@@ -19,6 +20,7 @@ export const NAV: NavItem[] = [
   { href: "/inventory/", label: "Inventory", icon: Package },
   { href: "/tasks/", label: "Tasks", icon: ListChecks },
   { href: "/purchases/", label: "Budget", icon: ShoppingCart },
+  { href: "/notes/", label: "Notes", icon: NotebookText },
   { href: "/household/", label: "Household", icon: Users },
 ];
 
