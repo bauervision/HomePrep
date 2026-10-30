@@ -149,6 +149,7 @@ export default function InventoryPage() {
           <InventoryItemForm
             key={editing === "new" ? "new" : editing.id}
             initial={editing === "new" ? null : editing}
+            inventory={data}
             onDone={() => setEditing(null)}
           />
         )}

@@ -17,7 +17,7 @@ import {
   type ReactNode,
 } from "react";
 import { auth, db, firebaseConfigured } from "@/lib/firebase";
-import { seedHousehold } from "@/lib/seed";
+import { needsSeeding, seedHousehold } from "@/lib/seed";
 import type { Household, Member } from "@/lib/types";
 
 export type SessionState =
@@ -144,10 +144,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   // Seed the 72-hour task set once per household (idempotent, transactional).
   useEffect(() => {
-    if (!home || home.seedVersion || seeded.current === home.id) return;
+    if (!home || !needsSeeding(home) || seeded.current === home.id) return;
     seeded.current = home.id;
     seedHousehold(home.id).catch((e: FirestoreError) =>
-      setSeedError(describe("Adding the starter 72-hour tasks", e)),
+      setSeedError(describe("Adding the starter tasks", e)),
     );
   }, [home]);
 

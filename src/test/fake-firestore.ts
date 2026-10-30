@@ -270,6 +270,10 @@ export const fakeDb = {
   get(path: string) {
     return store.get(path);
   },
+  remove(path: string) {
+    store.delete(path);
+    notify();
+  },
   /** Documents directly inside a collection path. */
   list(collectionPath: string) {
     return [...store.entries()]

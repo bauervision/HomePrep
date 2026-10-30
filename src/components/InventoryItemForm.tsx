@@ -10,6 +10,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { useState, type FormEvent } from "react";
+import { ReadinessPreview } from "@/components/ReadinessPreview";
 import { useHousehold } from "@/components/SessionProvider";
 import {
   Button,
@@ -39,10 +40,13 @@ export function InventoryFields({
   value: d,
   onChange,
   autoFocus,
+  preview,
 }: {
   value: InventoryDraft;
   onChange: (next: InventoryDraft) => void;
   autoFocus?: boolean;
+  /** Show projected readiness against the household's current inventory. */
+  preview?: { items: InventoryItem[]; editingId: string | null };
 }) {
   const set = <K extends keyof InventoryDraft>(k: K, v: InventoryDraft[K]) =>
     onChange({ ...d, [k]: v });
@@ -87,6 +91,13 @@ export function InventoryFields({
           </Select>
         </Field>
       </div>
+      {preview && (
+        <ReadinessPreview
+          draft={d}
+          items={preview.items}
+          editingId={preview.editingId}
+        />
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Storage location">
           <Input
@@ -112,7 +123,7 @@ export function InventoryFields({
           onChange={(e) => set("notes", e.target.value)}
         />
       </Field>
-      {(d.category === "Water" || d.category === "Food") && (
+      {!preview && (d.category === "Water" || d.category === "Food") && (
         <p className="text-[11px] text-slate">
           Readiness counts Water in gal / L / fl oz and Food in meals /
           person-days.
@@ -126,9 +137,12 @@ export function InventoryFields({
 export function InventoryItemForm({
   initial,
   onDone,
+  inventory,
 }: {
   initial: InventoryItem | null;
   onDone: () => void;
+  /** Household inventory, for the projected-readiness preview. */
+  inventory?: InventoryItem[];
 }) {
   const { household, user } = useHousehold();
   const [d, setD] = useState<InventoryDraft>(() =>
@@ -172,7 +186,16 @@ export function InventoryItemForm({
 
   return (
     <form onSubmit={save} className="space-y-3">
-      <InventoryFields value={d} onChange={setD} autoFocus />
+      <InventoryFields
+        value={d}
+        onChange={setD}
+        autoFocus
+        preview={
+          inventory
+            ? { items: inventory, editingId: initial?.id ?? null }
+            : undefined
+        }
+      />
       <ErrorText>{error}</ErrorText>
       <div className="flex items-center justify-between gap-2 pt-1">
         {initial ? (

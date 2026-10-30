@@ -3,7 +3,8 @@
 // Development-only design preview (excluded from production builds via the
 // `dev.tsx` page extension). Renders real shell/onboarding/dashboard components
 // with fixture sessions and data so layouts can be checked without signing in.
-// Usage: /preview/?screen=signin|onboarding|dashboard|budget|notes|kit|modal
+// Usage: /preview/?screen=signin|onboarding|dashboard|budget|notes|inventory-form|kit|modal
+// Dashboard also accepts &objective=7d|30d|60d|90d.
 
 import type { User } from "firebase/auth";
 import {
@@ -19,10 +20,12 @@ import {
   Users,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { Suspense, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
+import { isMilestoneKey } from "@/lib/readiness";
 import { InteriorFrame, Onboarding, SignIn } from "@/components/AppShell";
 import { BudgetView } from "@/components/budget/BudgetView";
 import { NotesView } from "@/components/notes/NotesView";
+import { InventoryItemForm } from "@/components/InventoryItemForm";
 import { Timestamp } from "firebase/firestore";
 import { DashboardView } from "@/components/DashboardView";
 import {
@@ -43,7 +46,13 @@ import {
   Select,
   Textarea,
 } from "@/components/ui";
-import type { InventoryItem, Note, Purchase, Task } from "@/lib/types";
+import type {
+  InventoryItem,
+  MilestoneKey,
+  Note,
+  Purchase,
+  Task,
+} from "@/lib/types";
 
 const TODAY = "2026-10-30";
 const user = {
@@ -286,6 +295,24 @@ const NOTES: Note[] = [
   },
 ];
 
+function PreviewDashboard() {
+  const initial = useSearchParams().get("objective");
+  const [objective, setObjective] = useState<MilestoneKey>(
+    isMilestoneKey(initial) ? initial : "72h",
+  );
+  return (
+    <DashboardView
+      householdSize={5}
+      inventory={[...INVENTORY, LINKED_ITEM]}
+      tasks={TASKS}
+      purchases={BUDGET}
+      today={TODAY}
+      objective={objective}
+      onObjectiveChange={setObjective}
+    />
+  );
+}
+
 function Session({
   state,
   children,
@@ -414,13 +441,25 @@ function Screen() {
       return (
         <Session state={ready}>
           <InteriorFrame>
-            <DashboardView
-              householdSize={5}
-              inventory={[...INVENTORY, LINKED_ITEM]}
-              tasks={TASKS}
-              purchases={BUDGET}
-              today={TODAY}
+            <PreviewDashboard />
+          </InteriorFrame>
+        </Session>
+      );
+    case "inventory-form":
+      return (
+        <Session state={ready}>
+          <InteriorFrame>
+            <PageHeader
+              title="Inventory"
+              sub={`${INVENTORY.length} items recorded`}
             />
+            <Modal open onClose={() => undefined} title="Add inventory item">
+              <InventoryItemForm
+                initial={null}
+                inventory={INVENTORY}
+                onDone={() => undefined}
+              />
+            </Modal>
           </InteriorFrame>
         </Session>
       );

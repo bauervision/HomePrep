@@ -36,6 +36,8 @@ export interface Household {
   householdSize: number;
   createdAt?: Timestamp;
   seedVersion?: number;
+  /** Starter-template version applied per milestone (see lib/seed.ts). */
+  seedTemplates?: Partial<Record<MilestoneKey, number>>;
 }
 
 export interface Member {
@@ -84,6 +86,9 @@ export interface Task {
   priority: Priority;
   status: TaskStatus;
   seedKey?: string;
+  /** Starter template this task came from, and that template's version. */
+  templateId?: string;
+  templateVersion?: number;
   /** Note this task was created from, if any (may point to a deleted note). */
   sourceNoteId?: string;
   createdAt?: Timestamp;

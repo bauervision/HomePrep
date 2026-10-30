@@ -19,7 +19,7 @@ import {
 } from "@/components/ui";
 import { sortTasks, useTasks } from "@/lib/data";
 import { db } from "@/lib/firebase";
-import { MILESTONES } from "@/lib/readiness";
+import { isMilestoneKey, MILESTONES } from "@/lib/readiness";
 import {
   PRIORITY_LABEL,
   TASK_STATUS_LABEL,
@@ -33,7 +33,12 @@ const PRIORITY_TONE = { 1: "bad", 2: "warn", 3: "neutral" } as const;
 export default function TasksPage() {
   const { household } = useHousehold();
   const { data, loading, error } = useTasks();
-  const [milestone, setMilestone] = useState<MilestoneKey | "all">("all");
+  // Deep link: /tasks/?milestone=30d preselects that objective's tasks.
+  const [milestone, setMilestone] = useState<MilestoneKey | "all">(() => {
+    if (typeof window === "undefined") return "all";
+    const m = new URLSearchParams(window.location.search).get("milestone");
+    return isMilestoneKey(m) ? m : "all";
+  });
   const [showDone, setShowDone] = useState(true);
   // Deep link: /tasks/?task=<id> opens that task (used by linked notes).
   const [editing, setEditing] = useState<string | "new" | null>(() =>

@@ -8,7 +8,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useRef, type KeyboardEvent } from "react";
 import { Badge, Bar, Card, cx, linkClass } from "@/components/ui";
 import {
   awaitingInventoryCount,
@@ -20,9 +20,9 @@ import { sortTasks } from "@/lib/data";
 import {
   daysOfSupply,
   daysUntil,
-  essentials72h,
   foodMeals,
-  milestoneStatus,
+  MILESTONES,
+  objectiveStatuses,
   waterGallons,
 } from "@/lib/readiness";
 import {
@@ -30,6 +30,7 @@ import {
   PRIORITY_LABEL,
   TASK_STATUS_LABEL,
   type InventoryItem,
+  type MilestoneKey,
   type Purchase,
   type Task,
 } from "@/lib/types";
@@ -46,6 +47,8 @@ export function DashboardView({
   tasks,
   purchases,
   today,
+  objective,
+  onObjectiveChange,
   error,
 }: {
   householdSize: number;
@@ -53,6 +56,9 @@ export function DashboardView({
   tasks: Task[];
   purchases: Purchase[];
   today: string;
+  /** The viewer's selected readiness objective. */
+  objective: MilestoneKey;
+  onObjectiveChange: (objective: MilestoneKey) => void;
   error?: string | null;
 }) {
   const view = useMemo(() => {
@@ -62,8 +68,7 @@ export function DashboardView({
       .filter((i) => i.expiresOn && daysUntil(i.expiresOn, today) <= 30)
       .sort((a, b) => (a.expiresOn! < b.expiresOn! ? -1 : 1));
     return {
-      essentials: essentials72h(inventory, tasks, size, today),
-      milestones: milestoneStatus(inventory, size, today),
+      statuses: objectiveStatuses(inventory, tasks, size, today),
       supply: daysOfSupply(inventory, size, today),
       unmeasured: [...water.unmeasured, ...food.unmeasured],
       expiring,
@@ -71,8 +76,6 @@ export function DashboardView({
         const counts = countRecordsByCategory(inventory);
         return CATEGORIES.map((c) => ({ category: c, count: counts[c] }));
       })(),
-      openTasks: sortTasks(tasks).filter((t) => t.status !== "complete"),
-      doneTasks: tasks.filter((t) => t.status === "complete").length,
       budget: budgetSummary(purchases),
       awaitingInventory: awaitingInventoryCount(
         purchases,
@@ -81,8 +84,39 @@ export function DashboardView({
     };
   }, [inventory, tasks, purchases, size, today]);
 
-  const metCount = view.essentials.filter((e) => e.met).length;
-  const missing = view.essentials.filter((e) => !e.met);
+  const selected =
+    view.statuses.find((s) => s.key === objective) ?? view.statuses[0];
+  const selectedIndex = view.statuses.indexOf(selected);
+  const earlier = view.statuses.slice(0, selectedIndex);
+  const missing = selected.essentials.filter((e) => !e.met);
+  const objectiveTasks = tasks.filter((t) => t.milestone === selected.key);
+  const openTasks = sortTasks(objectiveTasks).filter(
+    (t) => t.status !== "complete",
+  );
+  const doneTasks = objectiveTasks.length - openTasks.length;
+
+  const cardRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  function onCardKeyDown(e: KeyboardEvent<HTMLButtonElement>, idx: number) {
+    const last = MILESTONES.length - 1;
+    const next =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? idx === last
+          ? 0
+          : idx + 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? idx === 0
+            ? last
+            : idx - 1
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? last
+              : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    onObjectiveChange(MILESTONES[next].key);
+    cardRefs.current[next]?.focus();
+  }
 
   return (
     <div className="space-y-3">
@@ -94,9 +128,9 @@ export function DashboardView({
 
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
         <h1 className="text-xl font-semibold tracking-tight">
-          72-hour readiness
+          {selected.adjective} readiness
           <span className="ml-2.5 text-sm font-normal text-sage">
-            {metCount} of {view.essentials.length} essentials met · {size}{" "}
+            {selected.metCount} of {selected.total} essentials met · {size}{" "}
             people
           </span>
         </h1>
@@ -109,68 +143,78 @@ export function DashboardView({
         </p>
       </div>
 
-      <ol className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-        {view.milestones.map((m, idx) => {
-          const current = idx === 0;
+      <div
+        role="radiogroup"
+        aria-label="Readiness objective"
+        className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5"
+      >
+        {view.statuses.map((m, idx) => {
+          const active = m.key === selected.key;
           return (
-            <li
+            <button
               key={m.key}
+              ref={(el) => {
+                cardRefs.current[idx] = el;
+              }}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              tabIndex={active ? 0 : -1}
+              onClick={() => onObjectiveChange(m.key)}
+              onKeyDown={(e) => onCardKeyDown(e, idx)}
+              aria-label={`${m.label}: ${m.metCount} of ${m.total} essentials met${m.complete ? ", complete" : ""}`}
               className={cx(
-                "surface px-3.5 py-2.5",
-                current &&
-                  "border-pine/50 shadow-[inset_0_1px_0_rgb(120_230_180/0.12)]",
+                "surface px-3.5 py-2.5 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-amber motion-reduce:transition-none",
+                active
+                  ? "border-pine/60 shadow-[inset_0_1px_0_rgb(120_230_180/0.12),0_0_0_1px_rgb(47_163_122/0.35)]"
+                  : "hover:border-line-strong hover:bg-white/[0.02]",
               )}
             >
-              <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1.5 text-sm font-semibold">
                   <Mountain
                     size={14}
                     aria-hidden
-                    className={current ? "text-pine" : "text-copper-light/70"}
+                    className={active ? "text-pine" : "text-copper-light/70"}
                   />
                   {m.label}
                 </span>
-                {current ? (
-                  <Badge
-                    tone={metCount === view.essentials.length ? "good" : "warn"}
-                  >
-                    {metCount}/{view.essentials.length}
-                  </Badge>
-                ) : (
-                  <Badge tone={m.met ? "good" : "neutral"}>
-                    {m.met ? "Met" : "Later"}
-                  </Badge>
-                )}
-              </div>
-              <dl className="mt-2 space-y-1.5 text-[11px] text-sage">
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <dt>Water</dt>
-                    <dd className="text-ivory-dim tabular-nums">
+                <Badge tone={m.complete ? "good" : active ? "warn" : "neutral"}>
+                  {m.metCount}/{m.total}
+                </Badge>
+              </span>
+              <span
+                className="mt-2 block space-y-1.5 text-[11px] text-sage"
+                aria-hidden
+              >
+                <span className="block space-y-1">
+                  <span className="flex justify-between">
+                    <span>Water</span>
+                    <span className="text-ivory-dim tabular-nums">
                       {fmt(m.waterGal)} / {m.waterTarget} gal
-                    </dd>
-                  </div>
+                    </span>
+                  </span>
                   <Bar value={m.waterGal} max={m.waterTarget} />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <dt>Meals</dt>
-                    <dd className="text-ivory-dim tabular-nums">
+                </span>
+                <span className="block space-y-1">
+                  <span className="flex justify-between">
+                    <span>Meals</span>
+                    <span className="text-ivory-dim tabular-nums">
                       {fmt(m.meals)} / {m.mealsTarget}
-                    </dd>
-                  </div>
+                    </span>
+                  </span>
                   <Bar value={m.meals} max={m.mealsTarget} />
-                </div>
-              </dl>
-            </li>
+                </span>
+              </span>
+            </button>
           );
         })}
-      </ol>
+      </div>
 
       <div className="grid gap-3 lg:grid-cols-3">
-        <Card title="72-hour essentials" icon={ShieldCheck}>
+        <Card title={`${selected.adjective} essentials`} icon={ShieldCheck}>
           <ul className="space-y-2">
-            {view.essentials.map((e) => (
+            {selected.essentials.map((e) => (
               <li key={e.key} className="flex items-start gap-2.5">
                 <span
                   className={cx(
@@ -202,6 +246,24 @@ export function DashboardView({
               </li>
             ))}
           </ul>
+          {earlier.length > 0 && (
+            <p className="mt-3 border-t border-line pt-2.5 text-[11px] text-sage">
+              Builds on{" "}
+              {earlier.map((s, i) => (
+                <span key={s.key}>
+                  {i > 0 && " · "}
+                  <span
+                    className={
+                      s.metCount === s.total ? "text-[#7fd8ad]" : "text-amber"
+                    }
+                  >
+                    {s.label} {s.metCount}/{s.total}
+                  </span>
+                </span>
+              ))}
+              {!selected.earlierComplete && " — earlier essentials still open"}
+            </p>
+          )}
           {view.unmeasured.length > 0 && (
             <p className="mt-3 text-[11px] text-amber/80">
               {view.unmeasured.length} water/food item(s) use units that can’t
@@ -215,16 +277,26 @@ export function DashboardView({
           title="Current priorities"
           icon={ListChecks}
           action={
-            <Link href="/tasks/" className={cx("text-xs", linkClass)}>
-              {view.doneTasks}/{tasks.length} done · All tasks
+            <Link
+              href={`/tasks/?milestone=${selected.key}`}
+              className={cx("text-xs", linkClass)}
+            >
+              {doneTasks}/{objectiveTasks.length} done · {selected.label} tasks
             </Link>
           }
         >
-          {view.openTasks.length === 0 ? (
-            <p className="text-sm text-slate">No open tasks.</p>
+          {openTasks.length === 0 ? (
+            <p className="text-sm text-slate">
+              {objectiveTasks.length
+                ? "All tasks for this objective are complete."
+                : "No tasks for this objective yet."}
+            </p>
           ) : (
-            <ul className="divide-y divide-line">
-              {view.openTasks.slice(0, 6).map((t) => (
+            <ul
+              className="divide-y divide-line"
+              aria-label={`${selected.label} priorities`}
+            >
+              {openTasks.slice(0, 6).map((t) => (
                 <li
                   key={t.id}
                   className="flex items-center gap-2 py-1.5 first:pt-0 last:pb-0"
@@ -241,7 +313,7 @@ export function DashboardView({
                     {PRIORITY_LABEL[t.priority]}
                   </Badge>
                   <Link
-                    href="/tasks/"
+                    href={`/tasks/?task=${encodeURIComponent(t.id)}`}
                     className="min-w-0 flex-1 truncate text-sm text-ivory outline-none hover:text-copper-light focus-visible:text-copper-light"
                   >
                     {t.title}

@@ -3,6 +3,7 @@
 import { CheckCircle2, PackageCheck, PackagePlus } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { InventoryFields } from "@/components/InventoryItemForm";
+import { ReadinessPreview } from "@/components/ReadinessPreview";
 import { useHousehold } from "@/components/SessionProvider";
 import { Button, ErrorText, Field, Input, Select } from "@/components/ui";
 import {
@@ -242,15 +243,29 @@ export function AcquireFlow({
         </Select>
       </Field>
       {existing ? (
-        <p className="rounded-md border border-line bg-well px-3 py-2 text-sm text-ivory-dim">
-          {existing.name}: {fmtQty(existing.quantity)} →{" "}
-          <span className="font-medium text-ivory">
-            {fmtQty(existing.quantity + purchase.quantity)} {existing.unit}
-          </span>
-          . No new entry is created.
-        </p>
+        <>
+          <p className="rounded-md border border-line bg-well px-3 py-2 text-sm text-ivory-dim">
+            {existing.name}: {fmtQty(existing.quantity)} →{" "}
+            <span className="font-medium text-ivory">
+              {fmtQty(existing.quantity + purchase.quantity)} {existing.unit}
+            </span>
+            . No new entry is created.
+          </p>
+          <ReadinessPreview
+            items={inventory}
+            editingId={existing.id}
+            draft={{
+              ...existing,
+              quantity: existing.quantity + purchase.quantity,
+            }}
+          />
+        </>
       ) : (
-        <InventoryFields value={draft} onChange={setDraft} />
+        <InventoryFields
+          value={draft}
+          onChange={setDraft}
+          preview={{ items: inventory, editingId: null }}
+        />
       )}
       <ErrorText>{error}</ErrorText>
       <div className="flex justify-end gap-2">
