@@ -10,14 +10,18 @@ import {
 import Link from "next/link";
 import { useMemo } from "react";
 import { Badge, Bar, Card, cx, linkClass } from "@/components/ui";
-import { budgetSummary, formatCents } from "@/lib/budget";
+import {
+  awaitingInventoryCount,
+  budgetSummary,
+  formatCents,
+} from "@/lib/budget";
+import { countRecordsByCategory } from "@/lib/inventory";
 import { sortTasks } from "@/lib/data";
 import {
   daysOfSupply,
   daysUntil,
   essentials72h,
   foodMeals,
-  isExpired,
   milestoneStatus,
   waterGallons,
 } from "@/lib/readiness";
@@ -63,15 +67,17 @@ export function DashboardView({
       supply: daysOfSupply(inventory, size, today),
       unmeasured: [...water.unmeasured, ...food.unmeasured],
       expiring,
-      byCategory: CATEGORIES.map((c) => ({
-        category: c,
-        count: inventory.filter(
-          (i) => i.category === c && i.quantity > 0 && !isExpired(i, today),
-        ).length,
-      })),
+      byCategory: (() => {
+        const counts = countRecordsByCategory(inventory);
+        return CATEGORIES.map((c) => ({ category: c, count: counts[c] }));
+      })(),
       openTasks: sortTasks(tasks).filter((t) => t.status !== "complete"),
       doneTasks: tasks.filter((t) => t.status === "complete").length,
       budget: budgetSummary(purchases),
+      awaitingInventory: awaitingInventoryCount(
+        purchases,
+        new Set(inventory.map((i) => i.id)),
+      ),
     };
   }, [inventory, tasks, purchases, size, today]);
 
@@ -281,6 +287,7 @@ export function DashboardView({
             {view.byCategory.map((c) => (
               <li
                 key={c.category}
+                aria-label={`${c.category}: ${c.count} recorded ${c.count === 1 ? "item" : "items"}`}
                 className="flex items-center justify-between rounded-md border border-line bg-well px-2.5 py-1.5 text-sm"
               >
                 <span className="text-ivory-dim">{c.category}</span>
@@ -319,14 +326,39 @@ export function DashboardView({
               </ul>
             )}
           </div>
-          <div className="mt-3 flex items-center justify-between border-t border-line pt-2.5 text-xs text-sage">
-            <span>
-              Budget: {view.budget.plannedCount} planned purchase
-              {view.budget.plannedCount === 1 ? "" : "s"}
-            </span>
-            <Link href="/purchases/" className={linkClass}>
-              est. {formatCents(view.budget.remainingCents)} remaining
-            </Link>
+          <div
+            className="mt-3 space-y-0.5 border-t border-line pt-2.5 text-xs text-sage"
+            data-testid="dashboard-budget"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span>
+                Budget: {view.budget.plannedCount} planned · est.{" "}
+                <span className="text-ivory-dim tabular-nums">
+                  {formatCents(view.budget.remainingCents)}
+                </span>{" "}
+                remaining
+              </span>
+              <Link href="/purchases/" className={linkClass}>
+                Budget
+              </Link>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-x-2">
+              <span>
+                {view.budget.acquiredCount} acquired ·{" "}
+                <span className="text-ivory-dim tabular-nums">
+                  {formatCents(view.budget.spentCents)}
+                </span>{" "}
+                spent
+                {view.budget.acquiredWithoutCost > 0 && (
+                  <span className="text-amber"> (incomplete)</span>
+                )}
+              </span>
+              {view.awaitingInventory > 0 && (
+                <span className="text-amber">
+                  {view.awaitingInventory} not yet in inventory
+                </span>
+              )}
+            </div>
           </div>
         </Card>
       </div>

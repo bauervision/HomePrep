@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  awaitingInventoryCount,
   budgetSummary,
   centsToInput,
   estimatedTotalCents,
@@ -185,5 +186,28 @@ describe("inventoryLinkState", () => {
     expect(
       inventoryLinkState({ status: "acquired", inventoryItemId: "gone" }, ids),
     ).toBe("unlinked");
+  });
+});
+
+describe("dashboard budget figures", () => {
+  it("acquiring the only $100 purchase leaves nothing planned but keeps it visible", () => {
+    const only = purchase({
+      estimatedPrice: 100,
+      quantity: 1,
+      status: "acquired",
+      actualCostCents: 10000,
+    });
+    const s = budgetSummary([only]);
+    expect(s.plannedCount).toBe(0);
+    expect(s.remainingCents).toBe(0);
+    expect(s.acquiredCount).toBe(1);
+    expect(s.spentCents).toBe(10000);
+    expect(awaitingInventoryCount([only], new Set())).toBe(1);
+    expect(
+      awaitingInventoryCount(
+        [{ ...only, inventoryItemId: "x" }],
+        new Set(["x"]),
+      ),
+    ).toBe(0);
   });
 });

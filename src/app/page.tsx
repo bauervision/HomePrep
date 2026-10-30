@@ -11,7 +11,7 @@ export default function Dashboard() {
   const tasks = useTasks();
   const purchases = usePurchases();
 
-  if (inv.loading || tasks.loading)
+  if (inv.loading || tasks.loading || purchases.loading)
     return <p className="text-sm text-slate">Loading…</p>;
 
   return (

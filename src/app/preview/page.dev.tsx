@@ -380,9 +380,9 @@ function Screen() {
           <InteriorFrame>
             <DashboardView
               householdSize={5}
-              inventory={INVENTORY}
+              inventory={[...INVENTORY, LINKED_ITEM]}
               tasks={TASKS}
-              purchases={PURCHASES}
+              purchases={BUDGET}
               today={TODAY}
             />
           </InteriorFrame>

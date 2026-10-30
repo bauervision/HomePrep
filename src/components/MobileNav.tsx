@@ -2,14 +2,39 @@
 
 import { ChevronDown, LogOut, Menu } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import { currentNav, isActive, NAV } from "./nav";
 import { cx } from "./ui";
 
 /**
  * Compact dropdown navigation for small screens (below `lg`).
- * Closes on navigation, outside click, Escape, and when focus leaves the menu.
+ * Closes on navigation, outside click, backdrop tap, Escape, and when focus
+ * leaves the menu. While open, a dimming backdrop covers the page below the
+ * header and background scrolling is locked.
  */
+
+const noopSubscribe = () => () => {};
+
+/** Locks page scrolling; returns a function that restores the prior state. */
+export function lockScroll() {
+  const html = document.documentElement;
+  const body = document.body;
+  const prev = [html.style.overflow, body.style.overflow];
+  html.style.overflow = "hidden";
+  body.style.overflow = "hidden";
+  return () => {
+    html.style.overflow = prev[0];
+    body.style.overflow = prev[1];
+  };
+}
 export function MobileNav({
   pathname,
   onSignOut,
@@ -25,13 +50,24 @@ export function MobileNav({
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
+  // Portals need the DOM; false during server rendering.
+  const isClient = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
   const current = currentNav(pathname);
 
   useEffect(() => {
     if (!open) return;
     const onPointer = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpenFor(null);
+      const target = e.target as Node;
+      // The backdrop closes on click instead, so the tap can't fall through
+      // to content underneath once the backdrop stops catching pointer events.
+      if (backdropRef.current?.contains(target)) return;
+      if (!rootRef.current?.contains(target)) setOpenFor(null);
     };
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -42,6 +78,7 @@ export function MobileNav({
     };
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
+    const unlockScroll = lockScroll();
     // Move focus into the menu: the current page, else the first item.
     const target =
       panelRef.current?.querySelector<HTMLElement>('[aria-current="page"]') ??
@@ -50,6 +87,7 @@ export function MobileNav({
     return () => {
       document.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("keydown", onKey);
+      unlockScroll();
     };
   }, [open]);
 
@@ -68,6 +106,27 @@ export function MobileNav({
       items[next]?.focus();
     }
   }
+
+  const backdrop =
+    isClient &&
+    createPortal(
+      <div
+        ref={backdropRef}
+        aria-hidden
+        data-testid="mobile-nav-backdrop"
+        data-state={open ? "open" : "closed"}
+        onClick={() => {
+          setOpenFor(null);
+          buttonRef.current?.focus();
+        }}
+        className={cx(
+          // Below the sticky header (z-20), above page content.
+          "fixed inset-0 z-10 bg-black/60 transition-opacity duration-200 ease-out motion-reduce:transition-none lg:hidden",
+          open ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+      />,
+      document.body,
+    );
 
   return (
     <div
@@ -111,6 +170,7 @@ export function MobileNav({
         />
       </button>
 
+      {backdrop}
       {open && (
         <div
           ref={panelRef}

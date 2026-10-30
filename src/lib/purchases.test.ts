@@ -2,53 +2,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InventoryDraft } from "./inventory";
 import type { InventoryItem, Purchase, Task } from "./types";
 
-// In-memory Firestore stand-in. Transactions buffer writes and apply them only
-// if the callback succeeds (all-or-nothing), matching Firestore semantics.
-const h = vi.hoisted(() => ({
-  store: new Map<string, Record<string, unknown>>(),
-  written: [] as string[],
-  failNextCommit: false,
-}));
+// Shared in-memory Firestore (transactions are all-or-nothing, like Firestore).
+vi.mock(
+  "firebase/firestore",
+  async () => (await import("@/test/fake-firestore")).firestoreModule,
+);
+vi.mock(
+  "./firebase",
+  async () => (await import("@/test/fake-firestore")).firebaseModule,
+);
+const { fakeDb } = await import("@/test/fake-firestore");
 
-vi.mock("./firebase", () => ({ db: () => ({}) }));
-vi.mock("firebase/firestore", () => ({
-  doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join("/") }),
-  serverTimestamp: () => "SERVER_TS",
-  runTransaction: async (
-    _db: unknown,
-    fn: (tx: {
-      get: (r: {
-        path: string;
-      }) => Promise<{ exists: () => boolean; data: () => unknown }>;
-      set: (r: { path: string }, d: Record<string, unknown>) => void;
-      update: (r: { path: string }, d: Record<string, unknown>) => void;
-    }) => Promise<unknown>,
-  ) => {
-    const writes: (() => void)[] = [];
-    const result = await fn({
-      get: async (ref) => {
-        const v = h.store.get(ref.path);
-        return {
-          exists: () => v !== undefined,
-          data: () => structuredClone(v),
-        };
-      },
-      set: (ref, d) => writes.push(() => h.store.set(ref.path, { ...d })),
-      update: (ref, d) =>
-        writes.push(() => {
-          const cur = h.store.get(ref.path);
-          if (!cur) throw new Error(`No document to update: ${ref.path}`);
-          h.store.set(ref.path, { ...cur, ...d });
-        }),
-    });
-    if (h.failNextCommit) {
-      h.failNextCommit = false;
-      throw new Error("Firestore unavailable");
-    }
-    writes.forEach((w) => w());
-    return result;
+const h = {
+  store: {
+    get: (path: string) =>
+      fakeDb.get(path) as Record<string, unknown> | undefined,
+    set: (path: string, data: Record<string, unknown>) =>
+      fakeDb.set(path, data),
   },
-}));
+  set failNextCommit(v: boolean) {
+    if (v) fakeDb.failNext("commit");
+  },
+};
 
 const {
   addPurchaseToInventory,
@@ -77,12 +52,9 @@ function seedPurchase(id: string, p: Partial<Purchase> = {}) {
 }
 
 function inventory(hid = HID): InventoryItem[] {
-  return [...h.store.entries()]
-    .filter(([k]) => k.startsWith(`households/${hid}/inventory/`))
-    .map(([k, v]) => ({
-      id: k.split("/").pop()!,
-      ...(v as Omit<InventoryItem, "id">),
-    }));
+  return fakeDb.list(
+    `households/${hid}/inventory`,
+  ) as unknown as InventoryItem[];
 }
 
 const draft = (d: Partial<InventoryDraft> = {}): InventoryDraft => ({
@@ -99,10 +71,7 @@ const draft = (d: Partial<InventoryDraft> = {}): InventoryDraft => ({
 const water = () =>
   essentials72h(inventory(), [] as Task[], 5, "2026-10-30")[0];
 
-beforeEach(() => {
-  h.store.clear();
-  h.failNextCommit = false;
-});
+beforeEach(() => fakeDb.reset());
 
 describe("acquisition without inventory creation", () => {
   it("marks acquired and records actual cost without touching inventory or readiness", async () => {
@@ -348,7 +317,7 @@ describe("failed inventory creation and retry", () => {
         { mode: "new", draft: draft() },
         "Alex",
       ),
-    ).rejects.toThrow("Firestore unavailable");
+    ).rejects.toThrow("Simulated Firestore failure");
     expect(inventory()).toHaveLength(0);
     expect(h.store.get(P("p1"))!.inventoryItemId).toBeUndefined();
 

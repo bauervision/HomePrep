@@ -73,3 +73,19 @@ export function normalizeInventoryDraft(d: InventoryDraft): InventoryDraft {
     notes: d.notes.trim(),
   };
 }
+
+/**
+ * Number of inventory RECORDS per category (not quantities, volumes or
+ * coverage). Every saved record counts, including empty or expired ones;
+ * readiness applies its own qualifying rules separately.
+ */
+export function countRecordsByCategory(
+  items: Pick<InventoryItem, "category">[],
+) {
+  const counts = Object.fromEntries(CATEGORIES.map((c) => [c, 0])) as Record<
+    Category,
+    number
+  >;
+  for (const i of items) if (i.category in counts) counts[i.category]++;
+  return counts;
+}

@@ -161,3 +161,13 @@ export function inventoryLinkState(
     ? "linked"
     : "unlinked";
 }
+
+/** Acquired purchases not yet (or no longer) linked to a live inventory record. */
+export function awaitingInventoryCount(
+  purchases: Pick<Purchase, "status" | "inventoryItemId">[],
+  inventoryIds: ReadonlySet<string>,
+) {
+  return purchases.filter(
+    (p) => inventoryLinkState(p, inventoryIds) === "unlinked",
+  ).length;
+}

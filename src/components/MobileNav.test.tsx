@@ -134,4 +134,65 @@ describe("MobileNav", () => {
     expect(onSignOut).toHaveBeenCalledOnce();
     expect(screen.queryByRole("navigation")).toBeNull();
   });
+
+  describe("backdrop", () => {
+    const backdrop = () => screen.getByTestId("mobile-nav-backdrop");
+
+    it("is hidden and inert while closed, visible at 60% black when open", () => {
+      render(<MobileNav pathname="/" onSignOut={() => {}} />);
+      expect(backdrop().dataset.state).toBe("closed");
+      expect(backdrop().className).toContain("opacity-0");
+      expect(backdrop().className).toContain("pointer-events-none");
+      fireEvent.click(trigger());
+      expect(backdrop().dataset.state).toBe("open");
+      expect(backdrop().className).toContain("bg-black/60");
+      expect(backdrop().className).toContain("opacity-100");
+      // Fades, except for users who prefer reduced motion.
+      expect(backdrop().className).toContain("duration-200");
+      expect(backdrop().className).toContain("motion-reduce:transition-none");
+      // Rendered outside the header so it can cover the page; header stays above.
+      expect(backdrop().parentElement).toBe(document.body);
+      expect(backdrop().getAttribute("aria-hidden")).toBe("true");
+    });
+
+    it("closes on tap without letting the press fall through, and restores focus", () => {
+      render(<MobileNav pathname="/" onSignOut={() => {}} />);
+      fireEvent.click(trigger());
+      fireEvent.pointerDown(backdrop());
+      expect(screen.getByRole("navigation")).toBeTruthy(); // still open on press
+      fireEvent.click(backdrop());
+      expect(screen.queryByRole("navigation")).toBeNull();
+      expect(backdrop().dataset.state).toBe("closed");
+      expect(document.activeElement).toBe(trigger());
+    });
+
+    it("locks page scrolling while open and restores it on close", () => {
+      document.body.style.overflow = "auto";
+      render(<MobileNav pathname="/" onSignOut={() => {}} />);
+      fireEvent.click(trigger());
+      expect(document.documentElement.style.overflow).toBe("hidden");
+      expect(document.body.style.overflow).toBe("hidden");
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(document.documentElement.style.overflow).toBe("");
+      expect(document.body.style.overflow).toBe("auto");
+      expect(document.activeElement).toBe(trigger());
+      document.body.style.overflow = "";
+    });
+
+    it("restores scrolling if unmounted while open and after navigation", () => {
+      const { unmount, rerender } = render(
+        <MobileNav pathname="/" onSignOut={() => {}} />,
+      );
+      fireEvent.click(trigger());
+      act(() =>
+        rerender(<MobileNav pathname="/tasks/" onSignOut={() => {}} />),
+      );
+      expect(document.body.style.overflow).toBe("");
+      fireEvent.click(trigger());
+      expect(document.body.style.overflow).toBe("hidden");
+      unmount();
+      expect(document.body.style.overflow).toBe("");
+      expect(document.documentElement.style.overflow).toBe("");
+    });
+  });
 });
