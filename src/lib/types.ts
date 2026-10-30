@@ -105,10 +105,15 @@ export interface Purchase {
   priority: Priority;
   status: PurchaseStatus;
   notes: string;
+  /** Inventory record this purchase was added to (set only on confirmed transfer). */
   inventoryItemId?: string | null;
   acquiredAt?: Timestamp | null;
   acquiredByName?: string | null;
   createdAt?: Timestamp;
+  /** Optional retailer/product page; validated http(s) URL. Absent on older records. */
+  productUrl?: string | null;
+  /** Total amount actually paid, integer cents. Absent/null = not recorded. */
+  actualCostCents?: number | null;
 }
 
 export interface Comment {

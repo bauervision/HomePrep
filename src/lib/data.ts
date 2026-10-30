@@ -43,10 +43,3 @@ export function sortPurchases(list: Purchase[]) {
       a.name.localeCompare(b.name),
   );
 }
-
-export const money = (n: number) =>
-  n.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  });

@@ -1,34 +1,16 @@
 "use client";
 
-import {
-  House,
-  KeyRound,
-  LayoutDashboard,
-  ListChecks,
-  LogIn,
-  Package,
-  Plus,
-  ShoppingCart,
-  UserRound,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { House, KeyRound, LogIn, Plus, UserRound, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { createHousehold, JoinError, joinWithInvite } from "@/lib/household";
 import { Logo, LogoMark } from "./brand/Logo";
 import { WildernessBackdrop } from "./brand/WildernessBackdrop";
+import { MobileNav } from "./MobileNav";
+import { isActive, NAV } from "./nav";
 import { useSession } from "./SessionProvider";
 import { Button, CardTitle, cx, ErrorText, Field, Input } from "./ui";
-
-const NAV: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/inventory/", label: "Inventory", icon: Package },
-  { href: "/tasks/", label: "Tasks", icon: ListChecks },
-  { href: "/purchases/", label: "Purchases", icon: ShoppingCart },
-  { href: "/household/", label: "Household", icon: Users },
-];
 
 /** Full-bleed cinematic stage for sign-in, onboarding and status screens. */
 function Stage({ children }: { children: ReactNode }) {
@@ -273,7 +255,6 @@ export function TopBar() {
   const { state, signOut } = useSession();
   const pathname = usePathname();
   if (state.status !== "ready") return null;
-  const norm = (p: string) => (p.endsWith("/") ? p : `${p}/`);
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-[#040b11]/80 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:gap-5 sm:px-5">
@@ -282,19 +263,14 @@ export function TopBar() {
           className="shrink-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-amber"
           aria-label="HomePrep dashboard"
         >
-          <span className="sm:hidden">
-            <LogoMark size={30} title={null} />
-          </span>
-          <span className="hidden sm:block">
-            <Logo size="sm" />
-          </span>
+          <Logo size="sm" />
         </Link>
         <nav
           aria-label="Main"
-          className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto"
+          className="hidden min-w-0 flex-1 gap-0.5 lg:flex"
         >
           {NAV.map(({ href, label, icon: Icon }) => {
-            const active = norm(pathname) === href;
+            const active = isActive(pathname, href);
             return (
               <Link
                 key={href}
@@ -326,9 +302,20 @@ export function TopBar() {
           size="sm"
           onClick={signOut}
           title={state.user.email ?? ""}
+          className="hidden lg:inline-flex"
         >
           Sign out
         </Button>
+        <span className="flex-1 lg:hidden" />
+        <div className="lg:hidden">
+          <MobileNav
+            pathname={pathname}
+            onSignOut={signOut}
+            account={[state.household.name, state.user.email]
+              .filter(Boolean)
+              .join(" · ")}
+          />
+        </div>
       </div>
     </header>
   );
@@ -354,7 +341,9 @@ export function InteriorFrame({
   );
 }
 
-const DEV_PREVIEW = process.env.NODE_ENV === "development";
+const DEV_PREVIEW =
+  process.env.NODE_ENV === "development" ||
+  process.env.NEXT_PUBLIC_HOMEPREP_PREVIEW === "1";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { state, signOut } = useSession();

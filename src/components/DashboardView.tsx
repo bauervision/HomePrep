@@ -10,7 +10,8 @@ import {
 import Link from "next/link";
 import { useMemo } from "react";
 import { Badge, Bar, Card, cx, linkClass } from "@/components/ui";
-import { money, sortTasks } from "@/lib/data";
+import { budgetSummary, formatCents } from "@/lib/budget";
+import { sortTasks } from "@/lib/data";
 import {
   daysOfSupply,
   daysUntil,
@@ -70,16 +71,12 @@ export function DashboardView({
       })),
       openTasks: sortTasks(tasks).filter((t) => t.status !== "complete"),
       doneTasks: tasks.filter((t) => t.status === "complete").length,
-      openPurchases: purchases.filter((p) => p.status !== "acquired"),
+      budget: budgetSummary(purchases),
     };
   }, [inventory, tasks, purchases, size, today]);
 
   const metCount = view.essentials.filter((e) => e.met).length;
   const missing = view.essentials.filter((e) => !e.met);
-  const plannedSpend = view.openPurchases.reduce(
-    (s, p) => s + (p.estimatedPrice ?? 0) * p.quantity,
-    0,
-  );
 
   return (
     <div className="space-y-3">
@@ -324,11 +321,11 @@ export function DashboardView({
           </div>
           <div className="mt-3 flex items-center justify-between border-t border-line pt-2.5 text-xs text-sage">
             <span>
-              {view.openPurchases.length} planned purchase
-              {view.openPurchases.length === 1 ? "" : "s"}
+              Budget: {view.budget.plannedCount} planned purchase
+              {view.budget.plannedCount === 1 ? "" : "s"}
             </span>
             <Link href="/purchases/" className={linkClass}>
-              est. {money(plannedSpend)}
+              est. {formatCents(view.budget.remainingCents)} remaining
             </Link>
           </div>
         </Card>

@@ -3,7 +3,7 @@
 // Development-only design preview (excluded from production builds via the
 // `dev.tsx` page extension). Renders real shell/onboarding/dashboard components
 // with fixture sessions and data so layouts can be checked without signing in.
-// Usage: /preview/?screen=signin|onboarding|dashboard|kit|modal
+// Usage: /preview/?screen=signin|onboarding|dashboard|budget|kit|modal
 
 import type { User } from "firebase/auth";
 import {
@@ -21,6 +21,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 import { InteriorFrame, Onboarding, SignIn } from "@/components/AppShell";
+import { BudgetView } from "@/components/budget/BudgetView";
 import { DashboardView } from "@/components/DashboardView";
 import {
   SessionContext,
@@ -175,6 +176,80 @@ const PURCHASES: Purchase[] = [
   },
 ];
 
+const LINKED_ITEM: InventoryItem = item({
+  id: "purchase-b4",
+  name: "LED lantern 4-pack",
+  category: "Power",
+  quantity: 1,
+  unit: "pack",
+});
+
+const BUDGET: Purchase[] = [
+  ...PURCHASES.map((p) => ({
+    ...p,
+    productUrl: "https://example.com/product",
+  })),
+  {
+    id: "b1",
+    name: "Heavy-duty 5-gallon BPA-free stackable water storage containers with spigot (set of 6)",
+    category: "Water",
+    quantity: 6,
+    unit: "each",
+    estimatedPrice: 18.75,
+    priority: 1,
+    status: "proposed",
+    notes: "",
+  },
+  {
+    id: "b2",
+    name: "Hand-crank weather radio",
+    category: "Communications",
+    quantity: 1,
+    unit: "each",
+    estimatedPrice: 45,
+    priority: 2,
+    status: "acquired",
+    notes: "",
+    actualCostCents: 3999,
+    productUrl: "https://example.com/radio",
+  },
+  {
+    id: "b3",
+    name: "Emergency toilet kit",
+    category: "Sanitation",
+    quantity: 1,
+    unit: "kit",
+    estimatedPrice: 32,
+    priority: 2,
+    status: "acquired",
+    notes: "",
+  },
+  {
+    id: "b4",
+    name: "LED lantern 4-pack",
+    category: "Power",
+    quantity: 1,
+    unit: "pack",
+    estimatedPrice: 29.99,
+    priority: 3,
+    status: "acquired",
+    notes: "",
+    actualCostCents: 2849,
+    inventoryItemId: "purchase-b4",
+  },
+  {
+    id: "b5",
+    name: "N95 masks",
+    category: "Medical",
+    quantity: 20,
+    unit: "each",
+    estimatedPrice: null,
+    priority: 3,
+    status: "proposed",
+    notes: "",
+  },
+];
+
 function Session({
   state,
   children,
@@ -309,6 +384,23 @@ function Screen() {
               tasks={TASKS}
               purchases={PURCHASES}
               today={TODAY}
+            />
+          </InteriorFrame>
+        </Session>
+      );
+    case "budget":
+      return (
+        <Session state={ready}>
+          <InteriorFrame>
+            <BudgetView
+              data={BUDGET}
+              loading={false}
+              error={null}
+              inv={{
+                data: [...INVENTORY, LINKED_ITEM],
+                loading: false,
+                error: null,
+              }}
             />
           </InteriorFrame>
         </Session>

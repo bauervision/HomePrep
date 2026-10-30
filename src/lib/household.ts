@@ -3,7 +3,6 @@ import {
   collection,
   doc,
   getDoc,
-  runTransaction,
   serverTimestamp,
   Timestamp,
   writeBatch,
@@ -11,7 +10,6 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { InventoryItem, Purchase } from "./types";
 
 const INVITE_TTL_DAYS = 7;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -124,68 +122,4 @@ export async function joinWithInvite(user: User, rawCode: string) {
   });
   await batch.commit();
   return householdId;
-}
-
-/**
- * Marks a purchase acquired and records it in inventory exactly once: either by
- * adding the quantity to an existing item, or by creating an item whose ID is
- * derived from the purchase. The purchase is re-read inside the transaction, so a
- * second attempt (another device, double-click) is rejected.
- */
-export async function acquirePurchase(
-  householdId: string,
-  purchaseId: string,
-  target:
-    | { mode: "existing"; itemId: string }
-    | { mode: "new"; location: string; expiresOn: string | null },
-  byName: string,
-) {
-  const firestore = db();
-  const base = ["households", householdId] as const;
-  const pRef = doc(firestore, ...base, "purchases", purchaseId);
-  await runTransaction(firestore, async (tx) => {
-    const pSnap = await tx.get(pRef);
-    if (!pSnap.exists()) throw new Error("Purchase no longer exists.");
-    const p = pSnap.data() as Omit<Purchase, "id">;
-    if (p.status === "acquired" || p.inventoryItemId)
-      throw new Error("Already recorded as acquired.");
-
-    let itemId: string;
-    if (target.mode === "existing") {
-      const iRef = doc(firestore, ...base, "inventory", target.itemId);
-      const iSnap = await tx.get(iRef);
-      if (!iSnap.exists()) throw new Error("Inventory item no longer exists.");
-      const cur = iSnap.data() as InventoryItem;
-      tx.update(iRef, {
-        quantity: (cur.quantity ?? 0) + p.quantity,
-        updatedAt: serverTimestamp(),
-        updatedByName: byName,
-      });
-      itemId = target.itemId;
-    } else {
-      itemId = `purchase-${purchaseId}`;
-      const iRef = doc(firestore, ...base, "inventory", itemId);
-      if ((await tx.get(iRef)).exists())
-        throw new Error("Already recorded in inventory.");
-      tx.set(iRef, {
-        name: p.name,
-        category: p.category,
-        quantity: p.quantity,
-        unit: p.unit,
-        location: target.location,
-        expiresOn: target.expiresOn,
-        notes: "",
-        sourcePurchaseId: purchaseId,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        updatedByName: byName,
-      });
-    }
-    tx.update(pRef, {
-      status: "acquired",
-      inventoryItemId: itemId,
-      acquiredAt: serverTimestamp(),
-      acquiredByName: byName,
-    });
-  });
 }
