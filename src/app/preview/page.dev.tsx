@@ -28,6 +28,7 @@ import { NotesView } from "@/components/notes/NotesView";
 import { InventoryItemForm } from "@/components/InventoryItemForm";
 import { Timestamp } from "firebase/firestore";
 import { DashboardView } from "@/components/DashboardView";
+import { resolveProfile } from "@/lib/profile";
 import {
   SessionContext,
   type SessionState,
@@ -302,7 +303,8 @@ function PreviewDashboard() {
   );
   return (
     <DashboardView
-      householdSize={5}
+      plan={5}
+      profile={resolveProfile({ adults: 2, children: 3 })}
       inventory={[...INVENTORY, LINKED_ITEM]}
       tasks={TASKS}
       purchases={BUDGET}

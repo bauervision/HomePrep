@@ -99,6 +99,6 @@ describe("milestones", () => {
     ];
     const met = milestoneStatus(items, 5, TODAY).map((m) => m.met);
     expect(met).toEqual([true, true, false, false, false]);
-    expect(daysOfSupply(items, 5, TODAY).overall).toBe(8);
+    expect(daysOfSupply(items, 5, TODAY)?.overall).toBe(8);
   });
 });

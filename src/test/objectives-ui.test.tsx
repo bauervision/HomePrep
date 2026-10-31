@@ -111,6 +111,7 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
+  window.history.replaceState(null, "", "/");
   fakeDb.reset();
   window.localStorage.clear();
   fakeDb.set("households/h1", { name: "h1", ownerUid: "u1", householdSize: 5 });
@@ -154,7 +155,7 @@ describe("dashboard objective selection", () => {
         "Develop a water filtration and treatment plan",
       ),
     ).toBeTruthy();
-    expect(within(priorities).queryByText(/15 gallons/)).toBeNull();
+    expect(within(priorities).queryByText(/potable water/)).toBeNull();
     const link = screen.getByRole("link", {
       name: /0\/7 done · 30 days tasks/,
     });
@@ -228,7 +229,7 @@ describe("tasks page milestone filter", () => {
       await screen.findByText("Conduct a household preparedness drill"),
     ).toBeTruthy();
     expect(
-      screen.queryByText("Establish 15 gallons of potable water"),
+      screen.queryByText("Store 3 days of potable water for everyone"),
     ).toBeNull();
     window.history.pushState({}, "", "/");
   });

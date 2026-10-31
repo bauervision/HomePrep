@@ -14,12 +14,15 @@ export type Category = (typeof CATEGORIES)[number];
 
 export const UNITS = [
   "gal",
+  "qt",
+  "pt",
   "L",
   "fl oz",
   "meals",
   "person-days",
   "each",
   "pack",
+  "case",
   "kit",
   "box",
   "roll",
@@ -29,11 +32,42 @@ export const UNITS = [
 
 export type MilestoneKey = "72h" | "7d" | "30d" | "60d" | "90d";
 
+/** Optional, non-sensitive planning considerations (no medical details). */
+export const CONSIDERATIONS = {
+  infants: "Infants or toddlers",
+  olderAdults: "Older adults",
+  limitedMobility: "Limited mobility",
+  poweredEquipment: "Relies on powered equipment",
+} as const;
+export type Consideration = keyof typeof CONSIDERATIONS;
+
+export interface PetInfo {
+  dogs: number;
+  cats: number;
+  other: number;
+}
+
+/** Custom household targets: milestone → requirement id → amount. */
+export type TargetOverrides = Partial<
+  Record<MilestoneKey, Partial<Record<string, number>>>
+>;
+
 export interface Household {
   id: string;
   name: string;
   ownerUid: string;
+  /**
+   * Total people; the value every older client reads. When `adults` and
+   * `children` are present it always equals their sum (see lib/profile.ts).
+   */
   householdSize: number;
+  /** Profile fields (absent on households created before profile v1). */
+  adults?: number;
+  children?: number;
+  pets?: PetInfo | null;
+  considerations?: Consideration[];
+  profileVersion?: number;
+  targetOverrides?: TargetOverrides;
   createdAt?: Timestamp;
   seedVersion?: number;
   /** Starter-template version applied per milestone (see lib/seed.ts). */
@@ -58,6 +92,10 @@ export interface InventoryItem {
   location: string;
   expiresOn: string | null; // YYYY-MM-DD
   notes: string;
+  /** What ONE unit contains, for packaged goods (absent on older records). */
+  contains?: { amount: number; unit: string } | null;
+  /** "equipment" = capability (e.g. water filter), not stored supply. */
+  readinessRole?: "supply" | "equipment";
   sourcePurchaseId?: string;
   updatedAt?: Timestamp;
   updatedByName?: string;

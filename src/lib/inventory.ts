@@ -1,5 +1,7 @@
+import type { ItemContents, ReadinessRole } from "./quantities";
 import {
   CATEGORIES,
+  UNITS,
   type Category,
   type InventoryItem,
   type Purchase,
@@ -9,7 +11,22 @@ import {
 export type InventoryDraft = Pick<
   InventoryItem,
   "name" | "category" | "quantity" | "unit" | "location" | "expiresOn" | "notes"
->;
+> & {
+  contains: ItemContents | null;
+  readinessRole: ReadinessRole;
+};
+
+/** Unit a new item starts with in each category (always editable). */
+export const DEFAULT_UNIT: Record<Category, string> = {
+  Water: "gal",
+  Food: "meals",
+  Medical: "each",
+  Power: "each",
+  Sanitation: "each",
+  Communications: "each",
+  Safety: "each",
+  Evacuation: "each",
+};
 
 export const EMPTY_INVENTORY_DRAFT: InventoryDraft = {
   name: "",
@@ -19,7 +36,30 @@ export const EMPTY_INVENTORY_DRAFT: InventoryDraft = {
   location: "",
   expiresOn: null,
   notes: "",
+  contains: null,
+  readinessRole: "supply",
 };
+
+/** A new-item draft preset to a category (from a category deep link). */
+export function emptyDraftFor(category: Category = "Water"): InventoryDraft {
+  return { ...EMPTY_INVENTORY_DRAFT, category, unit: DEFAULT_UNIT[category] };
+}
+
+/**
+ * Changes a draft's category. A new item still on the previous category's
+ * default unit follows the new category's default; anything else is kept.
+ */
+export function withCategory(
+  d: InventoryDraft,
+  category: Category,
+  isNew: boolean,
+): InventoryDraft {
+  const unit =
+    isNew && d.unit === DEFAULT_UNIT[d.category]
+      ? DEFAULT_UNIT[category]
+      : d.unit;
+  return { ...d, category, unit };
+}
 
 export function draftFromItem(item: InventoryItem): InventoryDraft {
   return {
@@ -30,6 +70,8 @@ export function draftFromItem(item: InventoryItem): InventoryDraft {
     location: item.location,
     expiresOn: item.expiresOn,
     notes: item.notes,
+    contains: item.contains ?? null,
+    readinessRole: item.readinessRole ?? "supply",
   };
 }
 
@@ -43,6 +85,8 @@ export function draftFromPurchase(p: Purchase): InventoryDraft {
     location: "",
     expiresOn: null,
     notes: "",
+    contains: null,
+    readinessRole: "supply",
   };
 }
 
@@ -63,6 +107,15 @@ export function normalizeInventoryDraft(d: InventoryDraft): InventoryDraft {
   if (d.expiresOn && !/^\d{4}-\d{2}-\d{2}$/.test(d.expiresOn)) {
     throw new Error("Expiration must be a valid date.");
   }
+  const c = d.contains;
+  if (
+    c &&
+    (!Number.isFinite(c.amount) ||
+      c.amount <= 0 ||
+      !(UNITS as readonly string[]).includes(c.unit))
+  ) {
+    throw new Error("Contents per unit must be a positive amount and unit.");
+  }
   return {
     name,
     category: d.category,
@@ -71,6 +124,8 @@ export function normalizeInventoryDraft(d: InventoryDraft): InventoryDraft {
     location: d.location.trim(),
     expiresOn: d.expiresOn || null,
     notes: d.notes.trim(),
+    contains: c ? { amount: c.amount, unit: c.unit } : null,
+    readinessRole: d.readinessRole === "equipment" ? "equipment" : "supply",
   };
 }
 
@@ -88,4 +143,9 @@ export function countRecordsByCategory(
   >;
   for (const i of items) if (i.category in counts) counts[i.category]++;
   return counts;
+}
+
+/** A canonical category from untrusted input (e.g. a URL), else null. */
+export function parseCategory(v: string | null | undefined): Category | null {
+  return CATEGORIES.find((c) => c === v) ?? null;
 }

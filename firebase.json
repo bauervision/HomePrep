@@ -7,7 +7,13 @@
     "public": "out",
     "cleanUrls": true,
     "trailingSlash": true,
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "example.png",
+      "pattern.jpg"
+    ]
   },
   "emulators": {
     "firestore": {

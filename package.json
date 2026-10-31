@@ -1,6 +1,6 @@
 {
   "name": "homeprep",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3200",
@@ -12,7 +12,11 @@
     "format:check": "prettier --check .",
     "assets:wilderness": "node scripts/generate-wilderness-assets.mjs",
     "assets:icons": "node scripts/generate-brand-icons.mjs",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-homeprep \"vitest run --config vitest.rules.config.mts\""
+    "test:rules": "firebase emulators:exec --only firestore --project demo-homeprep \"vitest run --config vitest.rules.config.mts\"",
+    "release:status": "node scripts/release.mjs status",
+    "release:prepare": "node scripts/release.mjs prepare",
+    "release:verify": "node scripts/release.mjs verify",
+    "release:tag": "node scripts/release.mjs tag"
   },
   "dependencies": {
     "firebase": "^13.1.0",

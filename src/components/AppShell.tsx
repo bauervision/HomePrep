@@ -5,7 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { createHousehold, JoinError, joinWithInvite } from "@/lib/household";
+import { MAX_MEMBERS } from "@/lib/profile";
 import { Logo, LogoMark } from "./brand/Logo";
+import { VersionLabel } from "./brand/VersionLabel";
 import { WildernessBackdrop } from "./brand/WildernessBackdrop";
 import { MobileNav } from "./MobileNav";
 import { QuickNote } from "./notes/QuickNote";
@@ -74,6 +76,7 @@ export function SignIn() {
         <p className="mt-2 text-[11px] font-medium tracking-[0.16em] text-sage uppercase sm:tracking-[0.28em]">
           Prepare today. Protect tomorrow.
         </p>
+        <VersionLabel className="mt-2 block" />
         <p className="mt-6 text-sm text-ivory-dim">
           Private household preparedness workspace. Sign in to continue.
         </p>
@@ -105,7 +108,9 @@ export function Onboarding() {
   const { state, signOut } = useSession();
   const user = state.status === "noHousehold" ? state.user : null;
   const [name, setName] = useState("Our Household");
-  const [size, setSize] = useState(5);
+  // Explicit, editable starting point; the household confirms its real size.
+  const [adults, setAdults] = useState(1);
+  const [children, setChildren] = useState(0);
   const [code, setCode] = useState(() =>
     typeof window === "undefined"
       ? ""
@@ -120,7 +125,12 @@ export function Onboarding() {
     setBusy("create");
     setError(null);
     try {
-      await createHousehold(user!, name.trim() || "Our Household", size);
+      await createHousehold(user!, name.trim() || "Our Household", {
+        adults,
+        children,
+        pets: { dogs: 0, cats: 0, other: 0 },
+        considerations: [],
+      });
     } catch (err) {
       setError((err as Error).message);
       setBusy(null);
@@ -204,8 +214,11 @@ export function Onboarding() {
               home.
             </p>
             <div className="mt-auto pt-5">
-              <div className="grid grid-cols-[1fr_7.5rem] gap-3">
-                <Field label="Household name">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_5.5rem_5.5rem]">
+                <Field
+                  label="Household name"
+                  className="col-span-2 sm:col-span-1"
+                >
                   <Input
                     icon={House}
                     value={name}
@@ -214,22 +227,52 @@ export function Onboarding() {
                     className="h-12"
                   />
                 </Field>
-                <Field label="People">
+                <Field label="Adults">
                   <Input
                     icon={Users}
                     type="number"
                     min={1}
-                    max={30}
-                    value={size}
+                    max={MAX_MEMBERS}
+                    value={adults}
                     onChange={(e) =>
-                      setSize(
-                        Math.max(1, Math.min(30, Number(e.target.value) || 1)),
+                      setAdults(
+                        Math.max(
+                          1,
+                          Math.min(
+                            MAX_MEMBERS - children,
+                            Math.round(Number(e.target.value)) || 1,
+                          ),
+                        ),
+                      )
+                    }
+                    className="h-12"
+                  />
+                </Field>
+                <Field label="Children">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={MAX_MEMBERS - 1}
+                    value={children}
+                    onChange={(e) =>
+                      setChildren(
+                        Math.max(
+                          0,
+                          Math.min(
+                            MAX_MEMBERS - adults,
+                            Math.round(Number(e.target.value)) || 0,
+                          ),
+                        ),
                       )
                     }
                     className="h-12"
                   />
                 </Field>
               </div>
+              <p className="mt-2 text-[11px] text-slate">
+                Water and food targets scale with everyone in the household. You
+                can change this later.
+              </p>
               <Button
                 type="submit"
                 variant="copper"
@@ -264,7 +307,7 @@ export function TopBar() {
           className="shrink-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-amber"
           aria-label="HomePrep dashboard"
         >
-          <Logo size="sm" />
+          <Logo size="sm" version />
         </Link>
         <nav
           aria-label="Main"

@@ -10,6 +10,7 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { profileFields, type ProfileInput } from "./profile";
 
 const INVITE_TTL_DAYS = 7;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -33,15 +34,16 @@ function memberDoc(user: User, role: "owner" | "member", inviteCode?: string) {
 export async function createHousehold(
   user: User,
   name: string,
-  householdSize: number,
+  profile: ProfileInput,
 ) {
+  const fields = profileFields(profile);
   const firestore = db();
   const hRef = doc(collection(firestore, "households"));
   const batch = writeBatch(firestore);
   batch.set(hRef, {
     name,
     ownerUid: user.uid,
-    householdSize,
+    ...fields,
     createdAt: serverTimestamp(),
   });
   batch.set(doc(hRef, "members", user.uid), memberDoc(user, "owner"));

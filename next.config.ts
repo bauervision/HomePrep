@@ -1,5 +1,6 @@
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 import type { NextConfig } from "next";
+import { readPackageVersion } from "./scripts/package-version.mjs";
 
 export default function config(phase: string): NextConfig {
   const dev = phase === PHASE_DEVELOPMENT_SERVER;
@@ -11,6 +12,8 @@ export default function config(phase: string): NextConfig {
     output: "export",
     trailingSlash: true,
     images: { unoptimized: true },
+    // Inlined at build time from package.json (see src/lib/version.ts).
+    env: { NEXT_PUBLIC_APP_VERSION: readPackageVersion() },
     // `*.dev.tsx` pages (the design preview) exist only under `next dev` (or a preview build).
     pageExtensions: preview ? ["dev.tsx", "tsx", "ts"] : ["tsx", "ts"],
     turbopack: {

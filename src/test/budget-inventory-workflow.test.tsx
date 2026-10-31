@@ -118,7 +118,11 @@ beforeAll(() => {
   };
 });
 
-beforeEach(() => fakeDb.reset());
+beforeEach(() => {
+  fakeDb.reset();
+  // Inventory filters live in the URL; start every test on a clean one.
+  window.history.replaceState(null, "", "/");
+});
 afterEach(cleanup);
 
 const purchases = (hid = "h1") => fakeDb.list(`households/${hid}/purchases`);

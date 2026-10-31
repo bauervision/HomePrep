@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { readPackageVersion } from "./scripts/package-version.mjs";
 
 export default defineConfig({
   resolve: {
@@ -8,5 +9,7 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.{ts,tsx}"],
     environment: "node",
+    // Same build-time value next.config.ts inlines for the app.
+    env: { NEXT_PUBLIC_APP_VERSION: readPackageVersion() },
   },
 });

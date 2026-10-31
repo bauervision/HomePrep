@@ -24,7 +24,14 @@ import {
 import { db } from "@/lib/firebase";
 import { createInvite, revokeInvite } from "@/lib/household";
 import { useCollection } from "@/lib/hooks";
-import type { Invite, Member } from "@/lib/types";
+import { MAX_MEMBERS, profileFields, resolveProfile } from "@/lib/profile";
+import {
+  CONSIDERATIONS,
+  type Consideration,
+  type Invite,
+  type Member,
+  type PetInfo,
+} from "@/lib/types";
 
 function useInvites(householdId: string) {
   const [state, setState] = useState<{
@@ -53,10 +60,25 @@ function useInvites(householdId: string) {
     : { data: [] as Invite[], error: null };
 }
 
+const wholeNumber = (v: string, min: number, max: number) =>
+  Math.max(min, Math.min(max, Math.round(Number(v)) || min));
+
 function SettingsForm() {
   const { household } = useHousehold();
+  const profile = resolveProfile(household);
   const [name, setName] = useState(household.name);
-  const [size, setSize] = useState(household.householdSize);
+  // Older households recorded only a total; it is shown as adults for the
+  // household to confirm or split — never saved until they choose to.
+  const [adults, setAdults] = useState(
+    profile.adults ?? profile.memberCount ?? 1,
+  );
+  const [children, setChildren] = useState(profile.children ?? 0);
+  const [pets, setPets] = useState<PetInfo>(
+    profile.pets ?? { dogs: 0, cats: 0, other: 0 },
+  );
+  const [considerations, setConsiderations] = useState<Consideration[]>(
+    profile.considerations,
+  );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -67,7 +89,7 @@ function SettingsForm() {
     try {
       await updateDoc(doc(db(), "households", household.id), {
         name: name.trim() || household.name,
-        householdSize: size,
+        ...profileFields({ adults, children, pets, considerations }),
         updatedAt: serverTimestamp(),
       });
       setMsg("Saved.");
@@ -78,36 +100,116 @@ function SettingsForm() {
     }
   }
 
+  const petField = (k: keyof PetInfo, label: string) => (
+    <Field label={label}>
+      <Input
+        type="number"
+        min={0}
+        max={50}
+        value={pets[k]}
+        onChange={(e) =>
+          setPets((p) => ({ ...p, [k]: wholeNumber(e.target.value, 0, 50) }))
+        }
+      />
+    </Field>
+  );
+
   return (
     <form onSubmit={save} className="space-y-3">
-      <div className="grid grid-cols-[1fr_6rem] gap-2">
-        <Field label="Household name">
-          <Input
-            value={name}
-            maxLength={80}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </Field>
-        <Field label="People">
+      <Field label="Household name">
+        <Input
+          value={name}
+          maxLength={80}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </Field>
+      {profile.status !== "complete" && (
+        <p
+          role="note"
+          className="rounded-md border border-amber/30 bg-amber/6 px-2.5 py-1.5 text-[11px] text-ivory-dim"
+        >
+          {profile.memberCount
+            ? `Recorded as ${profile.memberCount} people, without adults and children. Confirm the split below and save.`
+            : "Household size isn’t set yet. Enter adults and children and save."}
+        </p>
+      )}
+      <div className="grid grid-cols-3 gap-2">
+        <Field label="Adults">
           <Input
             type="number"
             min={1}
-            max={30}
-            value={size}
+            max={MAX_MEMBERS}
+            value={adults}
             onChange={(e) =>
-              setSize(
-                Math.max(
-                  1,
-                  Math.min(30, Math.round(Number(e.target.value)) || 1),
-                ),
-              )
+              setAdults(wholeNumber(e.target.value, 1, MAX_MEMBERS - children))
             }
           />
         </Field>
+        <Field label="Children">
+          <Input
+            type="number"
+            min={0}
+            max={MAX_MEMBERS - 1}
+            value={children}
+            onChange={(e) =>
+              setChildren(wholeNumber(e.target.value, 0, MAX_MEMBERS - adults))
+            }
+          />
+        </Field>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-medium text-ivory-dim">Total</span>
+          <output
+            className="flex h-10 items-center text-sm text-ivory tabular-nums"
+            aria-label="Total people"
+          >
+            {adults + children}
+          </output>
+        </div>
       </div>
       <p className="text-[11px] text-slate">
-        Water and food targets scale with the number of people.
+        Water and food targets scale with everyone in the household. Custom
+        targets you set on a goal are kept when this changes.
       </p>
+      <fieldset className="space-y-1.5">
+        <legend className="mb-1.5 text-[13px] font-medium text-ivory-dim">
+          Pets <span className="font-normal text-slate">(optional)</span>
+        </legend>
+        <div className="grid grid-cols-3 gap-2">
+          {petField("dogs", "Dogs")}
+          {petField("cats", "Cats")}
+          {petField("other", "Other")}
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend className="mb-1.5 text-[13px] font-medium text-ivory-dim">
+          Planning considerations{" "}
+          <span className="font-normal text-slate">(optional)</span>
+        </legend>
+        <div className="grid gap-1 sm:grid-cols-2">
+          {(Object.keys(CONSIDERATIONS) as Consideration[]).map((c) => (
+            <label
+              key={c}
+              className="flex items-center gap-2 text-sm text-sage"
+            >
+              <input
+                type="checkbox"
+                checked={considerations.includes(c)}
+                onChange={(e) =>
+                  setConsiderations((list) =>
+                    e.target.checked
+                      ? [...list, c]
+                      : list.filter((x) => x !== c),
+                  )
+                }
+              />
+              {CONSIDERATIONS[c]}
+            </label>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11px] text-slate">
+          Used for planning only. Don’t record medical details here.
+        </p>
+      </fieldset>
       <div className="flex items-center gap-3">
         <Button type="submit" variant="emerald" icon={Save} loading={busy}>
           Save

@@ -4,11 +4,14 @@ import { Gauge, Info } from "lucide-react";
 import { useHousehold } from "@/components/SessionProvider";
 import { cx } from "@/components/ui";
 import { useObjective } from "@/lib/objective";
+import { householdPlan } from "@/lib/profile";
+import { looksLikeWaterEquipment } from "@/lib/quantities";
 import {
   categoryGuidance,
   localToday,
   milestoneByKey,
   projectReadiness,
+  type ReadinessDraft,
 } from "@/lib/readiness";
 import type { InventoryItem } from "@/lib/types";
 
@@ -25,7 +28,7 @@ export function ReadinessPreview({
   items,
   editingId,
 }: {
-  draft: Pick<InventoryItem, "category" | "quantity" | "unit" | "expiresOn">;
+  draft: ReadinessDraft & { name?: string };
   /** Current household inventory (authoritative records). */
   items: InventoryItem[];
   /** Item being edited, whose existing contribution is replaced. */
@@ -38,7 +41,7 @@ export function ReadinessPreview({
     items,
     editingId,
     draft,
-    household.householdSize,
+    householdPlan(household),
     objective,
     localToday(),
   );
@@ -62,15 +65,26 @@ export function ReadinessPreview({
   }
 
   const unit = p.unitLabel === "gal" ? "gallons" : "meals";
-  const ratio = p.target > 0 ? Math.min(1, p.projected / p.target) : 0;
+  const ratio =
+    p.target === null
+      ? 0
+      : p.target > 0
+        ? Math.min(1, p.projected / p.target)
+        : 1;
   const note =
     p.notCounted === "unit"
       ? p.kind === "water"
-        ? `“${draft.unit}” isn’t counted as potable water. Use gal, L or fl oz.`
-        : `“${draft.unit}” isn’t counted as food. Use meals or person-days.`
+        ? `“${draft.unit}” isn’t counted as potable water. ${
+            looksLikeWaterEquipment(draft.name ?? "")
+              ? "This looks like treatment equipment: mark it as equipment, or record a stored volume."
+              : "Use gal, qt, pt, fl oz or L, or set the volume each unit contains."
+          }`
+        : `“${draft.unit}” isn’t counted as food. Use meals or person-days, or set the meals each unit contains.`
       : p.notCounted === "expired"
         ? "Expired items don’t count toward readiness."
-        : null;
+        : p.notCounted === "equipment"
+          ? "Equipment is recorded as a capability and isn’t counted as stored supply."
+          : null;
 
   return (
     <section
@@ -87,7 +101,7 @@ export function ReadinessPreview({
       </div>
       <p className="mt-1.5 text-sm text-ivory tabular-nums">
         <span className="text-base font-semibold">{fmt(p.projected)}</span> /{" "}
-        {p.target} {unit}
+        {p.target === null ? "—" : fmt(p.target)} {unit}
       </p>
       <div
         className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]"
@@ -103,10 +117,13 @@ export function ReadinessPreview({
         />
       </div>
       <p className="mt-1.5 text-xs text-sage tabular-nums">
-        {p.percent}% of objective ·{" "}
-        {p.remaining > 0
-          ? `${fmt(p.remaining)} ${unit} remaining`
-          : "target met"}
+        {p.target === null
+          ? "Set your household size to calculate the target"
+          : `${p.percent}% of objective · ${
+              p.remaining > 0
+                ? `${fmt(p.remaining)} ${unit} remaining`
+                : "target met"
+            }`}
       </p>
       <p className="mt-0.5 text-[11px] text-slate tabular-nums">
         Recorded now {fmt(p.current)} · this entry {signed(p.change)}{" "}

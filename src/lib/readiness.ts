@@ -1,9 +1,27 @@
+import {
+  classifyItem,
+  isExpired,
+  type ItemContents,
+  type Measure,
+  type ReadinessRole,
+} from "./quantities";
+import {
+  QUANTITY_POLICIES,
+  recommendedAmount,
+  resolveTarget,
+  toPlan,
+  type PlanInput,
+  type QuantityRequirementId,
+  type RequirementBasis,
+  type ResolvedTarget,
+} from "./requirements";
 import type { Category, InventoryItem, MilestoneKey, Task } from "./types";
 
-// Planning baselines (FEMA / Ready.gov): 1 gallon of water per person per day,
-// three meals per person per day.
-export const GALLONS_PER_PERSON_DAY = 1;
-export const MEALS_PER_PERSON_DAY = 3;
+export { isExpired };
+
+// Planning baselines (see lib/requirements.ts for basis and assumptions).
+export const GALLONS_PER_PERSON_DAY = QUANTITY_POLICIES.water.rate;
+export const MEALS_PER_PERSON_DAY = QUANTITY_POLICIES.food.rate;
 
 export interface Milestone {
   key: MilestoneKey;
@@ -31,30 +49,12 @@ export function milestoneByKey(key: MilestoneKey): Milestone {
   return MILESTONES.find((m) => m.key === key) ?? MILESTONES[0];
 }
 
-const GALLONS_PER_UNIT: Record<string, number> = {
-  gal: 1,
-  L: 0.264172,
-  "fl oz": 1 / 128,
-};
-
-const MEALS_PER_UNIT: Record<string, number> = {
-  meals: 1,
-  "person-days": MEALS_PER_PERSON_DAY,
-};
-
 /** Today's date as YYYY-MM-DD in local time. */
 export function localToday(now = new Date()): string {
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-export function isExpired(
-  item: Pick<InventoryItem, "expiresOn">,
-  today: string,
-) {
-  return !!item.expiresOn && item.expiresOn < today;
 }
 
 export function daysUntil(dateStr: string, today: string) {
@@ -69,44 +69,61 @@ export function usable(items: InventoryItem[], today: string) {
 }
 
 export interface Measured {
+  /** Gallons (water) or meal-equivalents (food), unrounded. */
   amount: number;
-  /** Usable items in the category whose unit cannot be converted (not counted). */
+  /** Items that contribute, with their converted amounts. */
+  counted: { item: InventoryItem; amount: number }[];
+  /**
+   * Usable supplies whose amount cannot be converted (not counted). Warnings
+   * are derived from this list, so they always match the totals.
+   */
   unmeasured: InventoryItem[];
+  /** Treatment/cooking equipment: recorded, deliberately not counted. */
+  equipment: InventoryItem[];
 }
 
-function measure(
+/** Totals for one measure, from the shared item classification. */
+export function measureInventory(
   items: InventoryItem[],
-  category: Category,
-  factors: Record<string, number>,
+  measure: Measure,
   today: string,
 ): Measured {
-  let amount = 0;
-  const unmeasured: InventoryItem[] = [];
-  for (const item of usable(items, today)) {
-    if (item.category !== category) continue;
-    const f = factors[item.unit];
-    if (f === undefined) unmeasured.push(item);
-    else amount += item.quantity * f;
+  const r: Measured = { amount: 0, counted: [], unmeasured: [], equipment: [] };
+  for (const item of items) {
+    const c = classifyItem(item, today);
+    if (c.kind === "not-measured" || c.measure !== measure) continue;
+    if (c.kind === "counted") {
+      r.amount += c.amount;
+      r.counted.push({ item, amount: c.amount });
+    } else if (c.kind === "unconvertible") r.unmeasured.push(item);
+    else if (c.kind === "equipment") r.equipment.push(item);
   }
-  return { amount, unmeasured };
+  return r;
 }
 
 export const waterGallons = (items: InventoryItem[], today: string) =>
-  measure(items, "Water", GALLONS_PER_UNIT, today);
+  measureInventory(items, "water", today);
 
 export const foodMeals = (items: InventoryItem[], today: string) =>
-  measure(items, "Food", MEALS_PER_UNIT, today);
+  measureInventory(items, "food", today);
 
+/** Recommended baselines for a member count (no custom targets applied). */
 export function targets(householdSize: number, days: number) {
   return {
-    waterGal: householdSize * days * GALLONS_PER_PERSON_DAY,
-    meals: householdSize * days * MEALS_PER_PERSON_DAY,
+    waterGal: recommendedAmount(QUANTITY_POLICIES.water, householdSize, days)!,
+    meals: recommendedAmount(QUANTITY_POLICIES.food, householdSize, days)!,
   };
 }
 
 export interface Essential {
   key: string;
   label: string;
+  milestone: MilestoneKey;
+  basis: RequirementBasis;
+  /** Inventory category this essential draws on, if any. */
+  category?: Category;
+  /** Starter task that verifies this essential, if any. */
+  seedKey?: string;
   met: boolean;
   /** Human-readable, verifiable status, e.g. "8 / 15 gal". */
   detail: string;
@@ -115,6 +132,8 @@ export interface Essential {
   /** For quantity-based essentials: current / target, used to draw a bar. */
   current?: number;
   target?: number;
+  /** Quantity essentials: recommendation vs. household target. */
+  resolved?: ResolvedTarget;
 }
 
 /** How an essential is verified. Only recorded data counts. */
@@ -365,15 +384,51 @@ export const OBJECTIVE_ESSENTIALS: Record<MilestoneKey, EssentialDef[]> = {
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /** Essentials for one objective, each derived only from inventory or task status. */
+function quantityEssential(
+  def: EssentialDef,
+  id: QuantityRequirementId,
+  m: Milestone,
+  current: number,
+  plan: PlanInput,
+): Essential {
+  const policy = QUANTITY_POLICIES[id];
+  const resolved = resolveTarget(id, m, plan);
+  const base = {
+    key: def.key,
+    label: def.label,
+    milestone: m.key,
+    basis: policy.basis,
+    category: (id === "water" ? "Water" : "Food") as Category,
+    current,
+    resolved,
+  };
+  const t = resolved.target;
+  if (t === null) {
+    return {
+      ...base,
+      met: false,
+      detail: `${fmt(current)} ${policy.unit} · size not set`,
+      need: "Set your household size to calculate this target",
+    };
+  }
+  const what = id === "water" ? "gal of potable water" : "meals (shelf-stable)";
+  return {
+    ...base,
+    met: current >= t,
+    detail: `${fmt(current)} / ${fmt(t)} ${policy.unit}`,
+    need: `${fmt(Math.max(0, t - current))} more ${what}`,
+    target: t,
+  };
+}
+
 export function objectiveEssentials(
   objective: MilestoneKey,
   items: InventoryItem[],
   tasks: Task[],
-  householdSize: number,
+  plan: PlanInput,
   today: string,
 ): Essential[] {
   const m = milestoneByKey(objective);
-  const t = targets(householdSize, m.days);
   const w = waterGallons(items, today).amount;
   const f = foodMeals(items, today).amount;
   const live = usable(items, today);
@@ -382,30 +437,17 @@ export function objectiveEssentials(
     const ev = def.evidence;
     switch (ev.kind) {
       case "water":
-        return {
-          key: def.key,
-          label: def.label,
-          met: w >= t.waterGal,
-          detail: `${fmt(w)} / ${t.waterGal} gal`,
-          need: `${fmt(Math.max(0, t.waterGal - w))} more gal of potable water`,
-          current: w,
-          target: t.waterGal,
-        };
+        return quantityEssential(def, "water", m, w, plan);
       case "food":
-        return {
-          key: def.key,
-          label: def.label,
-          met: f >= t.meals,
-          detail: `${fmt(f)} / ${t.meals} meals`,
-          need: `${fmt(Math.max(0, t.meals - f))} more meals (shelf-stable)`,
-          current: f,
-          target: t.meals,
-        };
+        return quantityEssential(def, "food", m, f, plan);
       case "inventory": {
         const count = live.filter((i) => i.category === ev.category).length;
         return {
           key: def.key,
           label: def.label,
+          milestone: m.key,
+          basis: "capability",
+          category: ev.category,
           met: count > 0,
           detail:
             count > 0
@@ -420,6 +462,9 @@ export function objectiveEssentials(
         return {
           key: def.key,
           label: def.label,
+          milestone: m.key,
+          basis: "custom",
+          seedKey: ev.seedKey,
           met: done,
           detail: !tk ? "No task" : done ? "Task complete" : "Task open",
           need: ev.need,
@@ -433,10 +478,10 @@ export function objectiveEssentials(
 export function essentials72h(
   items: InventoryItem[],
   tasks: Task[],
-  householdSize: number,
+  plan: PlanInput,
   today: string,
 ): Essential[] {
-  return objectiveEssentials("72h", items, tasks, householdSize, today);
+  return objectiveEssentials("72h", items, tasks, plan, today);
 }
 
 export interface ObjectiveStatus extends Milestone {
@@ -444,9 +489,10 @@ export interface ObjectiveStatus extends Milestone {
   metCount: number;
   total: number;
   waterGal: number;
-  waterTarget: number;
+  /** Household target (custom or recommended); null when size is unknown. */
+  waterTarget: number | null;
   meals: number;
-  mealsTarget: number;
+  mealsTarget: number | null;
   /** Every essential of every earlier objective is met. */
   earlierComplete: boolean;
   /** This objective's essentials and all earlier objectives' essentials are met. */
@@ -462,22 +508,15 @@ export interface ObjectiveStatus extends Milestone {
 export function objectiveStatuses(
   items: InventoryItem[],
   tasks: Task[],
-  householdSize: number,
+  plan: PlanInput,
   today: string,
 ): ObjectiveStatus[] {
   const w = waterGallons(items, today).amount;
   const f = foodMeals(items, today).amount;
   let earlierComplete = true;
   return MILESTONES.map((m) => {
-    const essentials = objectiveEssentials(
-      m.key,
-      items,
-      tasks,
-      householdSize,
-      today,
-    );
+    const essentials = objectiveEssentials(m.key, items, tasks, plan, today);
     const metCount = essentials.filter((e) => e.met).length;
-    const t = targets(householdSize, m.days);
     const own = metCount === essentials.length;
     const status: ObjectiveStatus = {
       ...m,
@@ -485,9 +524,9 @@ export function objectiveStatuses(
       metCount,
       total: essentials.length,
       waterGal: w,
-      waterTarget: t.waterGal,
+      waterTarget: resolveTarget("water", m, plan).target,
       meals: f,
-      mealsTarget: t.meals,
+      mealsTarget: resolveTarget("food", m, plan).target,
       earlierComplete,
       complete: own && earlierComplete,
     };
@@ -503,12 +542,18 @@ export interface ReadinessProjection {
   current: number;
   projected: number;
   change: number;
-  target: number;
+  /** Household target; null when the household size is unknown. */
+  target: number | null;
   percent: number;
   remaining: number;
   /** Why the draft adds nothing toward readiness, if it doesn't. */
-  notCounted: "unit" | "expired" | "empty" | null;
+  notCounted: "unit" | "expired" | "empty" | "equipment" | null;
 }
+
+export type ReadinessDraft = Pick<
+  InventoryItem,
+  "category" | "quantity" | "unit" | "expiresOn"
+> & { contains?: ItemContents | null; readinessRole?: ReadinessRole };
 
 /**
  * Projects water or food readiness for an inventory draft against one
@@ -519,8 +564,8 @@ export interface ReadinessProjection {
 export function projectReadiness(
   items: InventoryItem[],
   editingId: string | null,
-  draft: Pick<InventoryItem, "category" | "quantity" | "unit" | "expiresOn">,
-  householdSize: number,
+  draft: ReadinessDraft,
+  plan: PlanInput,
   objective: MilestoneKey,
   today: string,
 ): ReadinessProjection | null {
@@ -538,10 +583,13 @@ export function projectReadiness(
     ...draft,
     quantity: Number.isFinite(draft.quantity) ? draft.quantity : 0,
   };
-  const measured = measureFn([asItem], today);
-  const contribution = measured.amount;
-  const t = targets(householdSize, milestoneByKey(objective).days);
-  const target = isWater ? t.waterGal : t.meals;
+  const classified = classifyItem(asItem, today);
+  const contribution = classified.kind === "counted" ? classified.amount : 0;
+  const target = resolveTarget(
+    isWater ? "water" : "food",
+    milestoneByKey(objective),
+    plan,
+  ).target;
   const projected = base + contribution;
   return {
     kind: isWater ? "water" : "food",
@@ -551,15 +599,19 @@ export function projectReadiness(
     change: projected - current,
     target,
     percent:
-      target > 0 ? Math.min(100, Math.round((projected / target) * 100)) : 0,
-    remaining: Math.max(0, target - projected),
+      target === null
+        ? 0
+        : target > 0
+          ? Math.min(100, Math.round((projected / target) * 100))
+          : 100,
+    remaining: target === null ? 0 : Math.max(0, target - projected),
     notCounted:
-      contribution > 0
+      classified.kind === "counted"
         ? null
-        : isExpired(asItem, today)
-          ? "expired"
-          : measured.unmeasured.length > 0
-            ? "unit"
+        : classified.kind === "unconvertible"
+          ? "unit"
+          : classified.kind === "expired" || classified.kind === "equipment"
+            ? classified.kind
             : "empty",
   };
 }
@@ -592,43 +644,99 @@ export interface MilestoneStatus {
   label: string;
   days: number;
   waterGal: number;
-  waterTarget: number;
+  waterTarget: number | null;
   meals: number;
-  mealsTarget: number;
+  mealsTarget: number | null;
   met: boolean;
 }
 
 /** Longer milestones are judged on water and food supply only. */
 export function milestoneStatus(
   items: InventoryItem[],
-  householdSize: number,
+  plan: PlanInput,
   today: string,
 ): MilestoneStatus[] {
   const water = waterGallons(items, today).amount;
   const meals = foodMeals(items, today).amount;
   return MILESTONES.map((m) => {
-    const t = targets(householdSize, m.days);
+    const wt = resolveTarget("water", m, plan).target;
+    const mt = resolveTarget("food", m, plan).target;
     return {
       ...m,
       waterGal: water,
-      waterTarget: t.waterGal,
+      waterTarget: wt,
       meals,
-      mealsTarget: t.meals,
-      met: water >= t.waterGal && meals >= t.meals,
+      mealsTarget: mt,
+      met: wt !== null && mt !== null && water >= wt && meals >= mt,
     };
   });
 }
 
-/** Whole days of supply the recorded water and food cover for the household. */
+/**
+ * Days the recorded water and food cover at the baseline rates for the
+ * household's people; null when the household size is unknown.
+ */
 export function daysOfSupply(
   items: InventoryItem[],
-  householdSize: number,
+  plan: PlanInput,
   today: string,
 ) {
+  const n = toPlan(plan).memberCount;
+  if (!n) return null;
   const water =
-    waterGallons(items, today).amount /
-    (householdSize * GALLONS_PER_PERSON_DAY);
-  const food =
-    foodMeals(items, today).amount / (householdSize * MEALS_PER_PERSON_DAY);
+    waterGallons(items, today).amount / (n * GALLONS_PER_PERSON_DAY);
+  const food = foodMeals(items, today).amount / (n * MEALS_PER_PERSON_DAY);
   return { water, food, overall: Math.min(water, food) };
+}
+
+export interface ReadinessFeedback {
+  tone: "met" | "progress";
+  text: string;
+}
+
+/**
+ * Concise messages describing how an inventory change moved the essentials of
+ * one objective. Only changes in counted amounts produce a message, so saving
+ * an unchanged record says nothing, and items that cannot be counted never
+ * produce a completion message.
+ */
+export function readinessFeedback(
+  before: InventoryItem[],
+  after: InventoryItem[],
+  tasks: Task[],
+  plan: PlanInput,
+  objective: MilestoneKey,
+  today: string,
+): ReadinessFeedback[] {
+  const m = milestoneByKey(objective);
+  const was = objectiveEssentials(objective, before, tasks, plan, today);
+  const now = objectiveEssentials(objective, after, tasks, plan, today);
+  const out: ReadinessFeedback[] = [];
+  now.forEach((e, i) => {
+    const prev = was[i];
+    if (e.resolved) {
+      const t = e.target;
+      if (t === undefined || e.current === prev.current) return;
+      const unit =
+        QUANTITY_POLICIES[e.key === "water" ? "water" : "food"].unitLong;
+      const name = e.label.toLowerCase();
+      if (e.met && !prev.met) {
+        out.push({
+          tone: "met",
+          text: `${m.adjective} ${name} target reached. ${fmt(e.current!)} ${unit} recorded; ${fmt(t)} ${unit} required.`,
+        });
+      } else if (!e.met) {
+        out.push({
+          tone: "progress",
+          text: `${m.adjective} ${name}: ${fmt(e.current!)} of ${fmt(t)} ${unit} recorded — ${fmt(t - e.current!)} ${unit} remaining.`,
+        });
+      }
+    } else if (e.basis === "capability" && e.met && !prev.met) {
+      out.push({
+        tone: "met",
+        text: `${m.adjective} ${e.label.toLowerCase()} essential met.`,
+      });
+    }
+  });
+  return out;
 }

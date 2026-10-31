@@ -64,17 +64,18 @@ export const TASK_TEMPLATES: TaskTemplate[] = [
   ...define("72h", [
     {
       key: "water",
-      title: "Establish 15 gallons of potable water",
+      // Size-neutral text: the household's own target is on the Goals page.
+      title: "Store 3 days of potable water for everyone",
       notes:
-        "1 gal per person per day × 5 people × 3 days. Store in sealed containers; record in Inventory as Water (gal).",
+        "Planning baseline: 1 gal per person per day × 3 days. Store in sealed containers; record in Inventory as Water (gal, pt, L…).",
       category: "Water",
       priority: 1,
     },
     {
       key: "food",
-      title: "Inventory 45 meals (15 person-days) of food",
+      title: "Store 3 days of shelf-stable food for everyone",
       notes:
-        "3 meals per person per day × 5 people × 3 days. Shelf-stable, no-cook preferred. Record as Food in meals or person-days.",
+        "Planning baseline: 3 meals per person per day × 3 days. Shelf-stable, no-cook preferred. Record as Food in meals or person-days.",
       category: "Food",
       priority: 1,
     },

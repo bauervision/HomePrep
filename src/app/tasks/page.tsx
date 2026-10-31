@@ -19,6 +19,7 @@ import {
 } from "@/components/ui";
 import { sortTasks, useTasks } from "@/lib/data";
 import { db } from "@/lib/firebase";
+import { setParams } from "@/lib/url-state";
 import { isMilestoneKey, MILESTONES } from "@/lib/readiness";
 import {
   PRIORITY_LABEL,
@@ -63,6 +64,13 @@ export default function TasksPage() {
       : null;
   const done = data.filter((t) => t.status === "complete").length;
 
+  function closeTask() {
+    setEditing(null);
+    // A deep-linked task (?task=) must not reopen on refresh.
+    if (new URLSearchParams(window.location.search).has("task"))
+      setParams({ task: null });
+  }
+
   async function setStatus(t: Task, status: TaskStatus) {
     setRowError(null);
     try {
@@ -94,10 +102,14 @@ export default function TasksPage() {
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <Select
             className="w-auto"
+            aria-label="Milestone"
             value={milestone}
-            onChange={(e) =>
-              setMilestone(e.target.value as MilestoneKey | "all")
-            }
+            onChange={(e) => {
+              const next = e.target.value as MilestoneKey | "all";
+              setMilestone(next);
+              // Keep the filter in the URL so refresh preserves it.
+              setParams({ milestone: next === "all" ? null : next });
+            }}
           >
             <option value="all">All milestones</option>
             {MILESTONES.map((m) => (
@@ -167,20 +179,16 @@ export default function TasksPage() {
       <Modal
         // A deep-linked task that no longer exists simply leaves the modal closed.
         open={editing === "new" || current !== null}
-        onClose={() => setEditing(null)}
+        onClose={closeTask}
         title={editing === "new" ? "New task" : "Task"}
         wide
       >
         {editing === "new" && (
-          <TaskForm key="new" initial={null} onDone={() => setEditing(null)} />
+          <TaskForm key="new" initial={null} onDone={closeTask} />
         )}
         {current && (
           <div className="space-y-4">
-            <TaskForm
-              key={current.id}
-              initial={current}
-              onDone={() => setEditing(null)}
-            />
+            <TaskForm key={current.id} initial={current} onDone={closeTask} />
             <div className="border-t border-line pt-3">
               <Comments parent="tasks" parentId={current.id} />
             </div>

@@ -1,5 +1,6 @@
 import { useId } from "react";
 import mark from "./mark.json";
+import { VersionLabel } from "./VersionLabel";
 
 const MARK = mark.paths;
 const MARK_COLORS = mark.colors;
@@ -74,10 +75,13 @@ export function LogoMark({
 export function Logo({
   size = "md",
   tagline = false,
+  version = false,
   className = "",
 }: {
   size?: "sm" | "md" | "lg";
   tagline?: boolean;
+  /** Show the application version beneath the wordmark. */
+  version?: boolean;
   className?: string;
 }) {
   const mark = { sm: 30, md: 44, lg: 96 }[size];
@@ -98,6 +102,7 @@ export function Logo({
           <span className="text-ivory">Home</span>
           <span className="text-copper-gradient">Prep</span>
         </span>
+        {version && <VersionLabel className="mt-1" />}
         {tagline && (
           <span className="mt-2 text-[10px] font-medium tracking-[0.16em] text-sage uppercase sm:text-xs sm:tracking-[0.28em]">
             Prepare today. Protect tomorrow.

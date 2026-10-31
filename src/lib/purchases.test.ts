@@ -65,6 +65,8 @@ const draft = (d: Partial<InventoryDraft> = {}): InventoryDraft => ({
   location: "Garage",
   expiresOn: null,
   notes: "",
+  contains: null,
+  readinessRole: "supply",
   ...d,
 });
 
