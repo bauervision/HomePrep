@@ -9,6 +9,7 @@ import {
   projectReadiness,
   targets,
 } from "./readiness";
+import { confirmedState } from "../test/requirement-state";
 import { TASK_TEMPLATES } from "./seed";
 import type { InventoryItem, MilestoneKey, Task } from "./types";
 
@@ -78,26 +79,34 @@ describe("objective essentials", () => {
     }
   });
 
-  it("verifies qualitative essentials only through completed tasks", () => {
+  it("verifies qualitative essentials through every core requirement", () => {
+    const cooking = (
+      tasks: Task[],
+      plan: Parameters<typeof objectiveEssentials>[3] = 5,
+    ) =>
+      objectiveEssentials("7d", [], tasks, plan, TODAY).find(
+        (e) => e.key === "cooking",
+      )!;
+    const method = (e: ReturnType<typeof cooking>) =>
+      e.checklist.requirements.find((r) => r.id === "7d.cooking.method")!;
+
     const open = { ...done("7d:cooking", "7d"), status: "todo" as const };
-    expect(
-      objectiveEssentials("7d", [], [open], 5, TODAY).find(
-        (e) => e.key === "cooking",
-      ),
-    ).toMatchObject({
-      met: false,
-      detail: "Task open",
+    expect(cooking([open])).toMatchObject({ met: false, status: "open" });
+    expect(method(cooking([open])).reason).toBe("Task open");
+    expect(method(cooking([])).reason).toBe("No task");
+
+    // The completed task supports one requirement, not the whole goal.
+    const taskOnly = cooking([done("7d:cooking", "7d")]);
+    expect(method(taskOnly).status).toBe("evidence");
+    expect(taskOnly.met).toBe(false);
+    expect(taskOnly.status).toBe("review");
+    expect(taskOnly.reviewNote).toMatch(/Previously met/);
+
+    const confirmed = cooking([done("7d:cooking", "7d")], {
+      memberCount: 5,
+      requirements: confirmedState(["7d"]),
     });
-    expect(
-      objectiveEssentials("7d", [], [done("7d:cooking", "7d")], 5, TODAY).find(
-        (e) => e.key === "cooking",
-      )?.met,
-    ).toBe(true);
-    expect(
-      objectiveEssentials("7d", [], [], 5, TODAY).find(
-        (e) => e.key === "cooking",
-      )?.detail,
-    ).toBe("No task");
+    expect(confirmed).toMatchObject({ met: true, status: "met" });
   });
 });
 
@@ -125,7 +134,8 @@ describe("objective statuses", () => {
     const tasks7d = OBJECTIVE_ESSENTIALS["7d"]
       .filter((d) => d.evidence.kind === "task")
       .map((d) => done((d.evidence as { seedKey: string }).seedKey, "7d"));
-    const s = objectiveStatuses(stock, tasks7d, 5, TODAY);
+    const plan7d = { memberCount: 5, requirements: confirmedState(["7d"]) };
+    const s = objectiveStatuses(stock, tasks7d, plan7d, TODAY);
     expect(s[1].metCount).toBe(s[1].total); // all 7-day essentials met …
     expect(s[0].complete).toBe(false); // … but 72-hour supplies aren't recorded
     expect(s[1].earlierComplete).toBe(false);
@@ -138,7 +148,21 @@ describe("objective statuses", () => {
       item({ category: "Communications", unit: "each" }),
       item({ category: "Sanitation", unit: "kit" }),
     ];
-    const all = objectiveStatuses(full, [...tasks7d, done("plan")], 5, TODAY);
+    const both = {
+      memberCount: 5,
+      requirements: confirmedState(["72h", "7d"]),
+    };
+    // Recorded category items alone no longer complete 72 hours …
+    expect(
+      objectiveStatuses(full, [...tasks7d, done("plan")], 5, TODAY)[0].complete,
+    ).toBe(false);
+    // … every core requirement must be satisfied.
+    const all = objectiveStatuses(
+      full,
+      [...tasks7d, done("plan")],
+      both,
+      TODAY,
+    );
     expect(all[0].complete).toBe(true);
     expect(all[1].complete).toBe(true);
     expect(all[2].complete).toBe(false);

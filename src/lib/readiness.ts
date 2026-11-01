@@ -1,3 +1,9 @@
+import { baselineFor, taskRequirement, type RequirementDef } from "./baseline";
+import {
+  evaluateGoal,
+  type EvalContext,
+  type GoalChecklist,
+} from "./checklist";
 import {
   classifyItem,
   isExpired,
@@ -134,6 +140,17 @@ export interface Essential {
   target?: number;
   /** Quantity essentials: recommendation vs. household target. */
   resolved?: ResolvedTarget;
+  /**
+   * met    — every applicable core requirement is satisfied
+   * review — not met, but it was met under the earlier, simpler rule (or a
+   *          linked record changed); reassess against the current baseline
+   * open   — not met
+   */
+  status: "met" | "open" | "review";
+  /** Why the goal needs review, when it does. */
+  reviewNote?: string;
+  /** Requirement-level evaluation shared by Dashboard and Goals. */
+  checklist: GoalChecklist;
 }
 
 /** How an essential is verified. Only recorded data counts. */
@@ -390,6 +407,7 @@ function quantityEssential(
   m: Milestone,
   current: number,
   plan: PlanInput,
+  checklist: GoalChecklist,
 ): Essential {
   const policy = QUANTITY_POLICIES[id];
   const resolved = resolveTarget(id, m, plan);
@@ -401,26 +419,61 @@ function quantityEssential(
     category: (id === "water" ? "Water" : "Food") as Category,
     current,
     resolved,
+    checklist,
   };
   const t = resolved.target;
   if (t === null) {
     return {
       ...base,
       met: false,
+      status: "open",
       detail: `${fmt(current)} ${policy.unit} · size not set`,
       need: "Set your household size to calculate this target",
     };
   }
   const what = id === "water" ? "gal of potable water" : "meals (shelf-stable)";
+  const met = checklist.complete;
+  const quantityMet = current >= t;
   return {
     ...base,
-    met: current >= t,
+    met,
+    status: met ? "met" : quantityMet ? "review" : "open",
+    ...(quantityMet && !met
+      ? {
+          reviewNote:
+            "The quantity target is reached, but another core requirement for this goal is still open.",
+        }
+      : {}),
     detail: `${fmt(current)} / ${fmt(t)} ${policy.unit}`,
-    need: `${fmt(Math.max(0, t - current))} more ${what}`,
+    need: quantityMet
+      ? nextStep(checklist)
+      : `${fmt(Math.max(0, t - current))} more ${what}`,
     target: t,
   };
 }
 
+/** Requirement definitions for one essential (system catalog). */
+export function essentialRequirements(
+  milestone: MilestoneKey,
+  def: EssentialDef,
+): RequirementDef[] {
+  const defs = baselineFor(milestone, def.key);
+  if (defs.length > 0) return defs;
+  const ev = def.evidence;
+  return ev.kind === "task"
+    ? [taskRequirement(milestone, def.key, ev.need, ev.seedKey)]
+    : [];
+}
+
+/** The first open core requirement, as a short next step. */
+function nextStep(c: GoalChecklist): string {
+  const open = c.requirements.filter((r) => r.counted && !r.satisfied);
+  if (open.length === 0) return "All core requirements done";
+  const more = open.length > 1 ? ` (+${open.length - 1} more)` : "";
+  return `${open[0].def.title}${more}`;
+}
+
+/** Essentials for one objective, each derived only from recorded data. */
 export function objectiveEssentials(
   objective: MilestoneKey,
   items: InventoryItem[],
@@ -432,45 +485,70 @@ export function objectiveEssentials(
   const w = waterGallons(items, today).amount;
   const f = foodMeals(items, today).amount;
   const live = usable(items, today);
+  const state = toPlan(plan).requirements;
+  const ctx: EvalContext = {
+    items,
+    tasks,
+    today,
+    quantity: {
+      water: { current: w, target: resolveTarget("water", m, plan).target },
+      food: { current: f, target: resolveTarget("food", m, plan).target },
+    },
+  };
 
   return OBJECTIVE_ESSENTIALS[objective].map((def): Essential => {
     const ev = def.evidence;
-    switch (ev.kind) {
-      case "water":
-        return quantityEssential(def, "water", m, w, plan);
-      case "food":
-        return quantityEssential(def, "food", m, f, plan);
-      case "inventory": {
-        const count = live.filter((i) => i.category === ev.category).length;
-        return {
-          key: def.key,
-          label: def.label,
-          milestone: m.key,
-          basis: "capability",
-          category: ev.category,
-          met: count > 0,
-          detail:
-            count > 0
-              ? `${count} item${count === 1 ? "" : "s"} recorded`
-              : "None recorded",
-          need: ev.need,
-        };
-      }
-      case "task": {
-        const tk = tasks.find((x) => x.seedKey === ev.seedKey);
-        const done = tk?.status === "complete";
-        return {
-          key: def.key,
-          label: def.label,
-          milestone: m.key,
-          basis: "custom",
-          seedKey: ev.seedKey,
-          met: done,
-          detail: !tk ? "No task" : done ? "Task complete" : "Task open",
-          need: ev.need,
-        };
-      }
-    }
+    const checklist = evaluateGoal(
+      essentialRequirements(objective, def),
+      objective,
+      def.key,
+      state,
+      ctx,
+    );
+    if (ev.kind === "water")
+      return quantityEssential(def, "water", m, w, plan, checklist);
+    if (ev.kind === "food")
+      return quantityEssential(def, "food", m, f, plan, checklist);
+
+    // Earlier rule: any in-stock item in the category, or the starter task.
+    const tk =
+      ev.kind === "task" ? tasks.find((x) => x.seedKey === ev.seedKey) : null;
+    const legacyMet =
+      ev.kind === "inventory"
+        ? live.some((i) => i.category === ev.category)
+        : tk?.status === "complete";
+    const met = checklist.complete;
+    const flagged = checklist.requirements.find(
+      (r) => r.counted && r.status === "needs-review",
+    );
+    const status = met ? "met" : legacyMet || flagged ? "review" : "open";
+    const { core } = checklist;
+    return {
+      key: def.key,
+      label: def.label,
+      milestone: m.key,
+      basis: ev.kind === "inventory" ? "capability" : "planning",
+      ...(ev.kind === "inventory"
+        ? { category: ev.category }
+        : { seedKey: ev.seedKey }),
+      met,
+      status,
+      ...(status === "review"
+        ? {
+            reviewNote: flagged
+              ? `${flagged.def.title}: ${flagged.reason}.`
+              : ev.kind === "inventory"
+                ? `Previously met by recorded ${ev.category} items. The updated baseline lists ${core.applicable} core requirements; ${core.done} are done.`
+                : `Previously met by the completed starter task. The updated baseline lists ${core.applicable} core requirements; ${core.done} are done.`,
+          }
+        : {}),
+      detail:
+        core.applicable === 0
+          ? "Not applicable"
+          : `${core.done} / ${core.applicable} done`,
+      need: nextStep(checklist),
+      checklist,
+    };
   });
 }
 
@@ -720,12 +798,15 @@ export function readinessFeedback(
       const unit =
         QUANTITY_POLICIES[e.key === "water" ? "water" : "food"].unitLong;
       const name = e.label.toLowerCase();
-      if (e.met && !prev.met) {
+      const reached = e.current! >= t;
+      const wasReached =
+        prev.target !== undefined && prev.current! >= prev.target;
+      if (reached && !wasReached) {
         out.push({
           tone: "met",
           text: `${m.adjective} ${name} target reached. ${fmt(e.current!)} ${unit} recorded; ${fmt(t)} ${unit} required.`,
         });
-      } else if (!e.met) {
+      } else if (!reached) {
         out.push({
           tone: "progress",
           text: `${m.adjective} ${name}: ${fmt(e.current!)} of ${fmt(t)} ${unit} recorded — ${fmt(t - e.current!)} ${unit} remaining.`,

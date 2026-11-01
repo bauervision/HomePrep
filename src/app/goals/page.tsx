@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
+import { RequirementChecklist } from "@/components/goals/RequirementChecklist";
 import { useHousehold } from "@/components/SessionProvider";
 import {
   Badge,
@@ -24,20 +25,19 @@ import {
   PageHeader,
   Select,
 } from "@/components/ui";
+import { GOAL_PURPOSE } from "@/lib/baseline";
 import { useInventory, useTasks } from "@/lib/data";
 import { relatedTasks, saveTargetOverride } from "@/lib/goals";
 import { useObjective } from "@/lib/objective";
 import { describeMembers, householdPlan, resolveProfile } from "@/lib/profile";
 import { describeQuantity } from "@/lib/quantities";
 import {
-  categoryGuidance,
   isMilestoneKey,
   localToday,
   measureInventory,
   milestoneByKey,
   MILESTONES,
   objectiveEssentials,
-  usable,
   type Essential,
 } from "@/lib/readiness";
 import {
@@ -134,18 +134,7 @@ export default function GoalsPage() {
                         active ? "bg-white/5 text-ivory" : "hover:bg-white/3",
                       )}
                     >
-                      <span
-                        className={cx(
-                          "grid size-4 shrink-0 place-items-center rounded-full",
-                          e.met
-                            ? "bg-pine text-ivory"
-                            : "border border-line-strong text-transparent",
-                        )}
-                        role="img"
-                        aria-label={e.met ? "Met" : "Not met"}
-                      >
-                        <Check size={11} strokeWidth={3} aria-hidden />
-                      </span>
+                      <GoalStatusIcon essential={e} />
                       <span className="min-w-0 flex-1 truncate">{e.label}</span>
                       <span className="text-xs text-sage tabular-nums">
                         {e.detail}
@@ -185,6 +174,35 @@ export default function GoalsPage() {
   );
 }
 
+export const GOAL_STATUS_LABEL: Record<Essential["status"], string> = {
+  met: "Met",
+  open: "Open",
+  review: "Needs review",
+};
+
+function GoalStatusIcon({ essential: e }: { essential: Essential }) {
+  return (
+    <span
+      className={cx(
+        "grid size-4 shrink-0 place-items-center rounded-full text-[10px] font-bold",
+        e.status === "met"
+          ? "bg-pine text-ivory"
+          : e.status === "review"
+            ? "border border-amber text-amber"
+            : "border border-line-strong text-transparent",
+      )}
+      role="img"
+      aria-label={GOAL_STATUS_LABEL[e.status]}
+    >
+      {e.status === "review" ? (
+        "!"
+      ) : (
+        <Check size={11} strokeWidth={3} aria-hidden />
+      )}
+    </span>
+  );
+}
+
 const sectionLabel =
   "mb-1.5 text-[11px] font-semibold tracking-[0.14em] text-sage uppercase";
 
@@ -213,44 +231,46 @@ function GoalDetail({
       title={e.label}
       icon={Target}
       action={
-        <Badge tone={e.met ? "good" : "warn"}>{e.met ? "Met" : "Open"}</Badge>
+        <Badge
+          tone={e.met ? "good" : e.status === "review" ? "warn" : "neutral"}
+        >
+          {GOAL_STATUS_LABEL[e.status]}
+        </Badge>
       }
     >
       <div className="space-y-4" data-testid="goal-detail">
-        <p className="text-xs text-sage">
-          {ms.label} · {BASIS_LABEL[e.basis]}
-        </p>
+        <div className="space-y-1">
+          <p className="text-xs text-sage">
+            {ms.label} · {BASIS_LABEL[e.basis]}
+          </p>
+          {GOAL_PURPOSE[e.key] && (
+            <p className="text-sm text-ivory-dim">{GOAL_PURPOSE[e.key]}</p>
+          )}
+        </div>
+        {e.reviewNote && (
+          <p
+            role="note"
+            className="rounded-md border border-amber/30 bg-amber/8 px-3 py-2 text-xs text-amber"
+          >
+            Needs review: {e.reviewNote}
+          </p>
+        )}
 
-        {isQuantityRequirement(e.key) && e.resolved ? (
+        {isQuantityRequirement(e.key) && e.resolved && (
           <QuantitySection
             essential={e}
             items={items}
             memberCount={memberCount}
             today={today}
           />
-        ) : (
-          <div className="space-y-2">
-            <p className="text-sm text-ivory-dim">{e.need}.</p>
-            {category && (
-              <p className="text-xs text-sage">
-                {categoryGuidance(category, e.milestone)}
-              </p>
-            )}
-            <p className="text-sm">
-              <span className="text-sage">Status: </span>
-              <span className="text-ivory">{e.detail}</span>
-            </p>
-            {category && e.basis === "capability" && (
-              <ItemList
-                title={`Recorded ${category} supplies`}
-                rows={usable(items, today)
-                  .filter((i) => i.category === category)
-                  .map((i) => ({ item: i, note: describeQuantity(i) }))}
-                empty={`No ${category} items recorded yet.`}
-              />
-            )}
-          </div>
         )}
+
+        <RequirementChecklist
+          essential={e}
+          items={items}
+          today={today}
+          skipIds={isQuantityRequirement(e.key) ? [`${e.key}.supply`] : []}
+        />
 
         {(addHref || category) && (
           <div className="flex flex-wrap gap-2">

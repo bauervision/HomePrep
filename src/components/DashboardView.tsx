@@ -260,15 +260,27 @@ export function DashboardView({
                 >
                   <span
                     className={cx(
-                      "mt-0.5 grid size-4 shrink-0 place-items-center rounded-full",
+                      "mt-0.5 grid size-4 shrink-0 place-items-center rounded-full text-[10px] font-bold",
                       e.met
                         ? "bg-gradient-to-b from-pine to-pine-deep text-ivory"
-                        : "border border-line-strong text-transparent",
+                        : e.status === "review"
+                          ? "border border-amber text-amber"
+                          : "border border-line-strong text-transparent",
                     )}
                     role="img"
-                    aria-label={e.met ? "Met" : "Not met"}
+                    aria-label={
+                      e.met
+                        ? "Met"
+                        : e.status === "review"
+                          ? "Needs review"
+                          : "Not met"
+                    }
                   >
-                    <Check size={11} strokeWidth={3} aria-hidden />
+                    {e.status === "review" ? (
+                      "!"
+                    ) : (
+                      <Check size={11} strokeWidth={3} aria-hidden />
+                    )}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2 text-sm">
@@ -276,7 +288,11 @@ export function DashboardView({
                         {e.label}
                       </span>
                       <span className="text-xs text-sage tabular-nums">
-                        {e.detail}
+                        {e.status === "review" ? (
+                          <span className="text-amber">Needs review</span>
+                        ) : (
+                          e.detail
+                        )}
                       </span>
                     </div>
                     {e.target !== undefined && (

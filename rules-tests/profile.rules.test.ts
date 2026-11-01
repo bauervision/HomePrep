@@ -173,3 +173,47 @@ describe("packaged inventory", () => {
     );
   });
 });
+
+describe("household requirements", () => {
+  /** Same shape of transaction as lib/goals.ts updateRequirement(). */
+  const save = (uid: string, hid: string, state: unknown) => {
+    const d = db(uid);
+    return runTransaction(d, async (tx) => {
+      const ref = doc(d, `households/${hid}`);
+      await tx.get(ref);
+      tx.update(ref, {
+        requirementState: state,
+        updatedAt: serverTimestamp(),
+      });
+    });
+  };
+  const at = "2026-10-31T00:00:00.000Z";
+  const state = {
+    "72h.plan.meeting": { confirmed: { by: "Bob", at }, updatedAt: at },
+    "72h.medical.power": {
+      notApplicable: { reason: "None", by: "Bob", at },
+      updatedAt: at,
+    },
+    "custom-abc123": {
+      custom: {
+        milestone: "72h",
+        goal: "comms",
+        title: "Charge radios",
+        explanation: "",
+        createdAt: at,
+      },
+      inventoryIds: ["radio"],
+      updatedAt: at,
+    },
+  };
+
+  it("lets members save household requirement decisions", async () => {
+    await assertSucceeds(save("bob", "h1", state));
+    await assertSucceeds(save("alice", "h1", {}));
+  });
+
+  it("isolates households", async () => {
+    await assertFails(save("eve", "h1", state));
+    await assertFails(save("alice", "h2", state));
+  });
+});

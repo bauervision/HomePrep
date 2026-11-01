@@ -76,17 +76,19 @@ describe("essentials72h", () => {
       item({ category: "Power", quantity: 0, unit: "each" }),
     ];
     const tasks = [{ seedKey: "plan", status: "complete" } as Task];
-    const met = Object.fromEntries(
-      essentials72h(items, tasks, 5, TODAY).map((x) => [x.key, x.met]),
+    const status = Object.fromEntries(
+      essentials72h(items, tasks, 5, TODAY).map((x) => [x.key, x.status]),
     );
-    expect(met).toEqual({
-      water: true,
-      food: true,
-      medical: true,
-      power: false, // zero quantity does not count
-      comms: false,
-      sanitation: false,
-      plan: true,
+    expect(status).toEqual({
+      water: "met",
+      food: "met",
+      // A kit or a completed plan task met the earlier rule; the current
+      // baseline has more core requirements, so these need review.
+      medical: "review",
+      power: "open", // zero quantity does not count
+      comms: "open",
+      sanitation: "open",
+      plan: "review",
     });
   });
 });

@@ -52,6 +52,32 @@ export type TargetOverrides = Partial<
   Record<MilestoneKey, Partial<Record<string, number>>>
 >;
 
+/**
+ * Household-scoped requirement data, keyed by requirement ID. System
+ * definitions live in code (lib/baseline.ts); only household decisions and
+ * evidence are stored. Timestamps are ISO strings (nested map values).
+ */
+export interface RequirementRecord {
+  /** Present only on household-created requirements. */
+  custom?: {
+    milestone: MilestoneKey;
+    goal: string;
+    title: string;
+    explanation: string;
+    createdAt: string;
+  };
+  /** Household wording for a system recommendation (original kept in code). */
+  text?: { title?: string; explanation?: string };
+  /** Applicability decision, tracked separately from completion. */
+  notApplicable?: { reason: string; at: string; by: string } | null;
+  /** Household-reported completion (not independent verification). */
+  confirmed?: { at: string; by: string } | null;
+  /** Inventory records the household selected as evidence. */
+  inventoryIds?: string[];
+  updatedAt: string;
+}
+export type RequirementState = Record<string, RequirementRecord>;
+
 export interface Household {
   id: string;
   name: string;
@@ -68,6 +94,7 @@ export interface Household {
   considerations?: Consideration[];
   profileVersion?: number;
   targetOverrides?: TargetOverrides;
+  requirementState?: RequirementState;
   createdAt?: Timestamp;
   seedVersion?: number;
   /** Starter-template version applied per milestone (see lib/seed.ts). */

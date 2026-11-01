@@ -214,7 +214,13 @@ describe("dashboard objective selection", () => {
         status: "complete",
       });
     });
-    await waitFor(() => expect(heading()).toContain("1 of 7 essentials met"));
+    // The task supports one cooking requirement; the goal needs review.
+    await waitFor(() =>
+      expect(screen.getByTestId("essential-cooking").textContent).toContain(
+        "Needs review",
+      ),
+    );
+    expect(heading()).toContain("0 of 7 essentials met");
     expect(
       screen.getByRole("link", { name: /1\/7 done · 7 days tasks/ }),
     ).toBeTruthy();

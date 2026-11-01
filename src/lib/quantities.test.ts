@@ -240,8 +240,26 @@ describe("projection and feedback", () => {
   });
 
   it("confirms a capability essential the first time it is met", () => {
-    const kit = [item({ category: "Medical", unit: "kit" })];
-    expect(readinessFeedback([], kit, [], plan, "72h", TODAY)).toEqual([
+    const kit = [item({ id: "kit", category: "Medical", unit: "kit" })];
+    // Recording a kit alone does not complete the essential.
+    expect(readinessFeedback([], kit, [], plan, "72h", TODAY)).toEqual([]);
+    const at = "2026-10-30T00:00:00.000Z";
+    const linked = {
+      ...plan,
+      requirements: {
+        "72h.medical.first-aid": { inventoryIds: ["kit"], updatedAt: at },
+        "72h.medical.medications": {
+          confirmed: { by: "A", at },
+          updatedAt: at,
+        },
+        "72h.medical.info": { confirmed: { by: "A", at }, updatedAt: at },
+        "72h.medical.power": {
+          notApplicable: { reason: "", by: "A", at },
+          updatedAt: at,
+        },
+      },
+    };
+    expect(readinessFeedback([], kit, [], linked, "72h", TODAY)).toEqual([
       { tone: "met", text: "72-hour medical & first aid essential met." },
     ]);
   });

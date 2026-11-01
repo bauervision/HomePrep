@@ -1,4 +1,4 @@
-import type { MilestoneKey, TargetOverrides } from "./types";
+import type { MilestoneKey, RequirementState, TargetOverrides } from "./types";
 
 /*
  * Preparedness requirements
@@ -19,6 +19,7 @@ export type RequirementBasis =
   | "per-household"
   | "per-day"
   | "capability"
+  | "planning"
   | "custom";
 
 export const BASIS_LABEL: Record<RequirementBasis, string> = {
@@ -27,13 +28,14 @@ export const BASIS_LABEL: Record<RequirementBasis, string> = {
   "per-household": "Per household",
   "per-day": "Per day",
   capability: "Equipment / capability",
-  custom: "Household plan",
+  planning: "Planning / documentation",
+  custom: "Custom / manual",
 };
 
 export interface QuantityPolicy {
   id: string;
   label: string;
-  basis: Exclude<RequirementBasis, "capability" | "custom">;
+  basis: Exclude<RequirementBasis, "capability" | "planning" | "custom">;
   /** Amount per basis unit (e.g. 1 gal per person per day). */
   rate: number;
   unit: string;
@@ -121,6 +123,8 @@ export function recommendationFormula(
 export interface Plan {
   memberCount: number | null;
   overrides?: TargetOverrides;
+  /** Household requirement records (lib/checklist.ts). */
+  requirements?: RequirementState;
 }
 
 /** A bare number is treated as a member count with no custom targets. */
