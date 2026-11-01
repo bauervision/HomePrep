@@ -1,6 +1,7 @@
 "use client";
 
-import { CircleCheck, Info, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, CircleCheck, Info, Plus, Search, X } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { InventoryItemForm } from "@/components/InventoryItemForm";
 import {
@@ -10,6 +11,7 @@ import {
   Empty,
   ErrorText,
   Input,
+  linkClass,
   Modal,
   PageHeader,
   Select,
@@ -22,6 +24,11 @@ import { CATEGORIES, type Category } from "@/lib/types";
 import { setParams, useSearch } from "@/lib/url-state";
 
 type Editing = { kind: "new" } | { kind: "edit"; id: string } | null;
+
+/** A Goals workspace URL to return to (only same-app goal links). */
+function returnToGoal(from: string | null) {
+  return from && /^\/goals\/\?[\w=&%.-]*$/.test(from) ? from : null;
+}
 
 /**
  * Deep links: /inventory/?category=Water filters (URL-backed, survives
@@ -71,9 +78,19 @@ export default function InventoryPage() {
   }
 
   const addLabel = filter === "All" ? "Add item" : `Add ${filter} item`;
+  const backTo = returnToGoal(params.get("from"));
 
   return (
     <>
+      {backTo && (
+        <Link
+          href={backTo}
+          className={`mb-2 inline-flex min-h-9 items-center gap-1.5 text-sm ${linkClass}`}
+        >
+          <ArrowLeft size={14} aria-hidden />
+          Back to goal
+        </Link>
+      )}
       <PageHeader
         title="Inventory"
         sub={

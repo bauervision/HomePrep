@@ -118,8 +118,12 @@ export type Condition =
    * and presets "Add item".
    */
   | { kind: "inventory"; category?: Category }
-  /** A starter task (by seedKey) is complete. */
-  | { kind: "task"; seedKey: string }
+  /**
+   * A task is complete: a starter task by seedKey, or the specific task a
+   * household goal is linked to.
+   */
+  | { kind: "task"; seedKey: string; taskId?: undefined }
+  | { kind: "task"; taskId: string; seedKey?: undefined }
   /** The household confirms it (reported, not verified). */
   | { kind: "attest" };
 
@@ -151,6 +155,11 @@ export interface RequirementDef {
    * requirements can be marked not applicable and leave the count.
    */
   appliesIf?: string;
+  /**
+   * Safety guidance: never dismissable, and its wording can't be replaced, so
+   * a household edit can't weaken the warning.
+   */
+  safety?: true;
   completion: Completion;
   sources: SourceId[];
   evidence: EvidenceClass;
@@ -624,6 +633,7 @@ const COOKING_7: Def[] = [
     action: "Confirm everyone in your household knows this.",
     basis: "capability",
     level: "core",
+    safety: true,
     completion: any(attest),
     sources: ["cdcCo", "readyPower", "readyFood"],
     evidence: "official",
@@ -637,6 +647,7 @@ const COOKING_7: Def[] = [
     action: "Link the detectors from Inventory, or confirm.",
     basis: "capability",
     level: "core",
+    safety: true,
     completion: any(linkFrom("Safety"), attest),
     sources: ["cdcCo", "readyPower"],
     evidence: "official",

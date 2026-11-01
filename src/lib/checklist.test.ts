@@ -16,15 +16,19 @@ import {
   evaluateGoal,
   evaluateRequirement,
   linkItem,
+  isDismissable,
   markNotApplicable,
+  planAction,
   removeCustom,
   resetText,
   restoreApplicable,
+  setNotes,
   unconfirm,
   unlinkItem,
   type EvalContext,
 } from "./checklist";
 import {
+  goalCategory,
   MILESTONES,
   OBJECTIVE_ESSENTIALS,
   objectiveEssentials,
@@ -332,7 +336,7 @@ describe("goal completion", () => {
     expect(e.checklist.core).toEqual({ done: 1, applicable: 4 });
     expect(e.checklist.supporting).toEqual({ done: 0, applicable: 2 });
     expect(e.detail).toBe("1 / 4 done");
-    expect(e.need).toBe("Shelter plan and evacuation route (+2 more)");
+    expect(e.need).toBe("Shelter plan and evacuation route");
   });
 
   it("does not complete sanitation from 240 rolls of toilet paper", () => {
@@ -451,5 +455,151 @@ describe("goal evaluation input", () => {
     );
     expect(c72.requirements.some((r) => r.custom)).toBe(false);
     expect(c7.requirements.some((r) => r.id === "custom-x")).toBe(true);
+  });
+});
+
+describe("safety guidance", () => {
+  it("can't be dismissed or reworded", () => {
+    for (const id of ["7d.cooking.outdoors", "7d.cooking.co-alarm"]) {
+      const d = def(id);
+      expect(d.safety).toBe(true);
+      expect(isDismissable(d, false)).toBe(false);
+      expect(() => customizeText(d, "Indoors is fine", "")).toThrow();
+      // Stored wording (e.g. written by an older client) is ignored.
+      const r = evaluateRequirement(
+        d,
+        d.id,
+        { text: { title: "Indoors is fine" }, updatedAt: AT },
+        ctx(),
+      );
+      expect(r.def.title).toBe(d.title);
+      expect(r.customized).toBe(false);
+    }
+  });
+});
+
+describe("household goals linked to tasks", () => {
+  const cooking = { id: "t1", seedKey: undefined, status: "todo" } as Task;
+  const create = (method: "confirm" | "task") =>
+    apply(
+      {},
+      "custom-t",
+      createCustom({}, "7d", "cooking", "Practice", "", AT, {
+        method,
+        taskId: "t1",
+        notes: " Saturday ",
+      }),
+    );
+
+  it("completes a task-method goal only through its task", () => {
+    const s = create("task");
+    expect(s["custom-t"]).toMatchObject({
+      custom: { taskId: "t1", method: "task" },
+      notes: "Saturday",
+    });
+    const at = (status: Task["status"], state = s) =>
+      evaluateRequirement(
+        null,
+        "custom-t",
+        state["custom-t"],
+        ctx({ tasks: [{ ...cooking, status }] }),
+      ).status;
+    expect(at("todo")).toBe("not-started");
+    expect(at("complete")).toBe("evidence");
+    // Confirming can't bypass the task.
+    const confirmed = apply(s, "custom-t", confirm("A", AT));
+    expect(at("todo", confirmed)).toBe("not-started");
+    // A deleted task is flagged, not silently treated as done.
+    expect(
+      evaluateRequirement(null, "custom-t", s["custom-t"], ctx()).status,
+    ).toBe("needs-review");
+  });
+
+  it("lets a confirm-method goal be confirmed or completed by its task", () => {
+    const s = create("confirm");
+    expect(s["custom-t"].custom).not.toHaveProperty("method");
+    const done = { ...cooking, status: "complete" as const };
+    expect(
+      evaluateRequirement(
+        null,
+        "custom-t",
+        s["custom-t"],
+        ctx({ tasks: [done] }),
+      ).status,
+    ).toBe("evidence");
+    const c = apply(s, "custom-t", confirm("A", AT));
+    expect(
+      evaluateRequirement(null, "custom-t", c["custom-t"], ctx()).status,
+    ).toBe("confirmed");
+  });
+
+  it("requires a task for the task method and keeps links on edit", () => {
+    expect(() =>
+      createCustom({}, "7d", "cooking", "X", "", AT, { method: "task" }),
+    ).toThrow(/Choose the task/);
+    let s = apply(
+      {},
+      "custom-i",
+      createCustom({}, "72h", "comms", "Radios", "", AT, {
+        inventoryId: "kit",
+      }),
+    );
+    expect(s["custom-i"].inventoryIds).toEqual(["kit"]);
+    s = apply(s, "custom-i", editCustom("Radios", "", { notes: "" }));
+    expect(s["custom-i"].inventoryIds).toEqual(["kit"]);
+    expect(s["custom-i"]).not.toHaveProperty("notes");
+  });
+
+  it("keeps notes on a system recommendation until cleared", () => {
+    const s = apply({}, "72h.plan.meeting", setNotes("Library steps"));
+    expect(s["72h.plan.meeting"].notes).toBe("Library steps");
+    expect(
+      apply(s, "72h.plan.meeting", setNotes("  "))["72h.plan.meeting"],
+    ).toBeUndefined();
+  });
+});
+
+describe("plan action", () => {
+  it("starts, continues, reviews and flags", () => {
+    const start = essential("7d", "cooking", []);
+    expect(planAction(start.checklist, start.status)).toEqual({
+      kind: "start",
+      label: "Start Plan",
+      targetId: "7d.cooking.no-cook",
+    });
+    const s = apply({}, "7d.cooking.no-cook", confirm("A", AT));
+    const cont = essential("7d", "cooking", [], s);
+    expect(planAction(cont.checklist, cont.status)).toMatchObject({
+      label: "Continue Plan",
+      targetId: "7d.cooking.method",
+    });
+    const all = confirmedState(["7d"]);
+    const done = essential("7d", "cooking", [], all);
+    expect(planAction(done.checklist, done.status)).toEqual({
+      kind: "review",
+      label: "Review Plan",
+      targetId: null,
+    });
+    const tp = item({ category: "Sanitation" });
+    const flagged = essential("72h", "sanitation", [tp]);
+    expect(planAction(flagged.checklist, flagged.status)).toMatchObject({
+      label: "Review Requirements",
+      targetId: "72h.sanitation.supplies",
+    });
+  });
+});
+
+describe("goal inventory category", () => {
+  it("uses the goal's category, else its requirements' mapping", () => {
+    const cat = (m: Parameters<typeof essential>[0], k: string) =>
+      goalCategory(essential(m, k, []));
+    expect(cat("72h", "sanitation")).toBe("Sanitation");
+    expect(cat("72h", "water")).toBe("Water");
+    expect(cat("7d", "cooking")).toBe("Safety");
+    expect(cat("7d", "hygiene")).toBe("Sanitation");
+    expect(cat("7d", "charging")).toBe("Power");
+    // Planning-only goals have no inventory actions.
+    expect(cat("72h", "plan")).toBeUndefined();
+    expect(cat("7d", "meds")).toBeUndefined();
   });
 });

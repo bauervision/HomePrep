@@ -105,6 +105,12 @@ const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const inStock = (i: InventoryItem, today: string) =>
   i.quantity > 0 && !isExpired(i, today);
 
+/** Task a task condition refers to: a linked task by ID, or a starter task. */
+const taskFor = (c: Extract<Condition, { kind: "task" }>, tasks: Task[]) =>
+  tasks.find((t) =>
+    c.taskId !== undefined ? t.id === c.taskId : t.seedKey === c.seedKey,
+  );
+
 function evaluateCondition(
   c: Condition,
   record: RequirementRecord | undefined,
@@ -139,8 +145,11 @@ function evaluateCondition(
       };
     }
     case "task": {
-      const t = ctx.tasks.find((x) => x.seedKey === c.seedKey);
-      if (!t) return { rank: "none", reason: "No task" };
+      const t = taskFor(c, ctx.tasks);
+      if (!t)
+        return c.taskId !== undefined
+          ? { rank: "stale", reason: "Linked task was deleted" }
+          : { rank: "none", reason: "No task" };
       if (t.status === "complete")
         return { rank: "evidence", reason: "Task complete" };
       return {
@@ -158,29 +167,38 @@ function evaluateCondition(
 /** Definition for a household-created requirement. */
 function customDef(id: string, r: RequirementRecord): RequirementDef {
   const c = r.custom!;
+  const task: Condition[] = c.taskId
+    ? [{ kind: "task", taskId: c.taskId }]
+    : [];
+  const byTask = c.method === "task" && task.length > 0;
   return {
     id,
     goal: c.goal,
     milestones: [c.milestone],
     title: c.title,
     explanation: c.explanation,
-    action: "Link supporting items, or confirm when done.",
+    action: byTask
+      ? "Complete the linked task."
+      : "Link supporting items, or confirm when done.",
     basis: "custom",
     level: "core",
-    completion: {
-      mode: "any",
-      conditions: [{ kind: "inventory" }, { kind: "attest" }],
-    },
+    completion: byTask
+      ? { mode: "all", conditions: task }
+      : {
+          mode: "any",
+          conditions: [{ kind: "inventory" }, ...task, { kind: "attest" }],
+        },
     sources: [],
     evidence: "household" satisfies EvidenceClass,
     since: 1,
   };
 }
 
-/** Applies household wording to a system definition. */
+/** Applies household wording to a system definition (never to safety text). */
 function effective(def: RequirementDef, r: RequirementRecord | undefined) {
   const t = r?.text;
-  if (!t || (!t.title && !t.explanation)) return { def, customized: false };
+  if (def.safety || !t || (!t.title && !t.explanation))
+    return { def, customized: false };
   return {
     def: {
       ...def,
@@ -213,12 +231,13 @@ export function evaluateRequirement(
     custom,
     customized,
     linked: ctx.items.filter((i) => linkedIds.includes(i.id)),
-    tasks: def.completion.conditions.flatMap((c) =>
-      c.kind === "task" ? ctx.tasks.filter((t) => t.seedKey === c.seedKey) : [],
-    ),
+    tasks: def.completion.conditions.flatMap((c) => {
+      const t = c.kind === "task" ? taskFor(c, ctx.tasks) : undefined;
+      return t ? [t] : [];
+    }),
   };
 
-  const dismissable = custom || def.appliesIf !== undefined;
+  const dismissable = isDismissable(def, custom);
   if (record?.notApplicable) {
     if (dismissable) {
       return {
@@ -288,6 +307,13 @@ export function evaluateRequirement(
     reason,
   };
 }
+
+/**
+ * Only conditional system requirements and household-created ones may leave
+ * the count. Core and safety guidance can't be dismissed.
+ */
+export const isDismissable = (def: RequirementDef, custom: boolean) =>
+  custom || (def.appliesIf !== undefined && !def.safety);
 
 export interface Tally {
   done: number;
@@ -369,6 +395,7 @@ function prune(r: RequirementRecord): RequirementRecord | null {
   const hasText = !!(r.text?.title || r.text?.explanation);
   if (
     !hasText &&
+    !r.notes &&
     !r.notApplicable &&
     !r.confirmed &&
     !(r.inventoryIds && r.inventoryIds.length > 0)
@@ -393,6 +420,32 @@ export function applyChange(
 }
 
 const clean = (s: string) => s.trim().replace(/\s+/g, " ");
+
+/** Optional details of a household-created requirement. */
+export interface CustomOptions {
+  method?: "confirm" | "task";
+  /** A task of this household. Required when `method` is "task". */
+  taskId?: string | null;
+  /** Inventory record to link as evidence when the goal is created. */
+  inventoryId?: string | null;
+  notes?: string;
+}
+
+function checkNotes(notes: string) {
+  if (notes.length > MAX_EXPLANATION)
+    throw new Error(`Keep the notes under ${MAX_EXPLANATION} characters.`);
+}
+
+/** Linked task and completion method, validated together. */
+function customLink(o: CustomOptions) {
+  const taskId = o.taskId || undefined;
+  if (o.method === "task" && !taskId)
+    throw new Error("Choose the task that completes this goal.");
+  return {
+    ...(taskId ? { taskId } : {}),
+    ...(taskId && o.method === "task" ? { method: "task" as const } : {}),
+  };
+}
 
 function checkText(title: string, explanation: string) {
   if (!title) throw new Error("Enter a title.");
@@ -438,6 +491,7 @@ export function customizeText(
   title: string,
   explanation: string,
 ): RecordChange {
+  if (original.safety) throw new Error("Safety guidance can’t be reworded.");
   const t = clean(title);
   const e = explanation.trim();
   checkText(t, e);
@@ -465,6 +519,18 @@ export const linkItem =
     return { ...base(r), inventoryIds: [...ids, itemId] };
   };
 
+/** Household notes on any requirement (empty removes them). */
+export function setNotes(notes: string): RecordChange {
+  const n = notes.trim();
+  checkNotes(n);
+  return (r) => {
+    const next = { ...base(r) };
+    if (n) next.notes = n;
+    else delete next.notes;
+    return next;
+  };
+}
+
 export const unlinkItem =
   (itemId: string): RecordChange =>
   (r) => ({
@@ -480,28 +546,63 @@ export function createCustom(
   title: string,
   explanation: string,
   at: string,
+  options: CustomOptions = {},
 ): RecordChange {
   const t = clean(title);
   const e = explanation.trim();
   checkText(t, e);
+  const notes = (options.notes ?? "").trim();
+  checkNotes(notes);
+  const link = customLink(options);
   const count = Object.values(state ?? {}).filter((r) => r.custom).length;
   if (count >= MAX_CUSTOM)
     throw new Error(
       `A household can have up to ${MAX_CUSTOM} custom requirements.`,
     );
   return () => ({
-    custom: { milestone, goal, title: t, explanation: e, createdAt: at },
+    custom: {
+      milestone,
+      goal,
+      title: t,
+      explanation: e,
+      createdAt: at,
+      ...link,
+    },
+    ...(options.inventoryId ? { inventoryIds: [options.inventoryId] } : {}),
+    ...(notes ? { notes } : {}),
     updatedAt: at,
   });
 }
 
-export function editCustom(title: string, explanation: string): RecordChange {
+/**
+ * Edits a household-created requirement. Linked task and method are replaced
+ * only when `options` is given; notes only when `options.notes` is set.
+ */
+export function editCustom(
+  title: string,
+  explanation: string,
+  options?: CustomOptions,
+): RecordChange {
   const t = clean(title);
   const e = explanation.trim();
   checkText(t, e);
+  const notes = options?.notes?.trim();
+  if (notes !== undefined) checkNotes(notes);
+  const link = options && customLink(options);
   return (r) => {
     if (!r?.custom) throw new Error("This requirement no longer exists.");
-    return { ...r, custom: { ...r.custom, title: t, explanation: e } };
+    const custom = { ...r.custom, title: t, explanation: e };
+    if (link) {
+      delete custom.taskId;
+      delete custom.method;
+      Object.assign(custom, link);
+    }
+    const next: RequirementRecord = { ...r, custom };
+    if (notes !== undefined) {
+      if (notes) next.notes = notes;
+      else delete next.notes;
+    }
+    return next;
   };
 }
 
@@ -512,3 +613,41 @@ export const newCustomId = () =>
 
 /** System definition for an ID, if it is one. */
 export const systemDef = (id: string) => BASELINE_BY_ID.get(id) ?? null;
+
+/* ---------- Guided plan action ---------- */
+
+export interface PlanAction {
+  kind: "start" | "continue" | "review" | "review-flagged";
+  label: string;
+  /** Requirement to open and focus; null opens the whole list for review. */
+  targetId: string | null;
+}
+
+/**
+ * The goal's primary action. Start/Continue lead to the first open core
+ * requirement; a goal needing review leads to the flagged requirement first;
+ * a complete goal opens its list for review.
+ */
+export function planAction(
+  c: GoalChecklist,
+  status: "met" | "open" | "review",
+): PlanAction {
+  const open = c.requirements.filter((r) => r.counted && !r.satisfied);
+  const flagged = open.find((r) => r.status === "needs-review");
+  if (status === "review")
+    return {
+      kind: "review-flagged",
+      label: "Review Requirements",
+      targetId: (flagged ?? open[0])?.id ?? null,
+    };
+  if (c.complete || open.length === 0)
+    return { kind: "review", label: "Review Plan", targetId: null };
+  const started = c.requirements.some(
+    (r) => r.satisfied || r.status === "in-progress",
+  );
+  return {
+    kind: started ? "continue" : "start",
+    label: started ? "Continue Plan" : "Start Plan",
+    targetId: (flagged ?? open[0]).id,
+  };
+}

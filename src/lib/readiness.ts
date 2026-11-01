@@ -467,10 +467,22 @@ export function essentialRequirements(
 
 /** The first open core requirement, as a short next step. */
 function nextStep(c: GoalChecklist): string {
-  const open = c.requirements.filter((r) => r.counted && !r.satisfied);
-  if (open.length === 0) return "All core requirements done";
-  const more = open.length > 1 ? ` (+${open.length - 1} more)` : "";
-  return `${open[0].def.title}${more}`;
+  const open = c.requirements.find((r) => r.counted && !r.satisfied);
+  return open ? open.def.title : "All core requirements done";
+}
+
+/**
+ * Inventory category a goal's actions add to and filter by: the goal's own
+ * category, else the one its requirements link from (e.g. CO detectors are
+ * Safety items). Planning-only goals have none.
+ */
+export function goalCategory(e: Essential): Category | undefined {
+  if (e.category) return e.category;
+  for (const r of e.checklist.requirements) {
+    for (const c of r.def.completion.conditions)
+      if (c.kind === "inventory" && c.category) return c.category;
+  }
+  return undefined;
 }
 
 /** Essentials for one objective, each derived only from recorded data. */

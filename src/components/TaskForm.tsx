@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Check, Plus, Save, Trash2 } from "lucide-react";
 import {
   addDoc,
   collection,
@@ -41,6 +41,9 @@ import {
 /**
  * Create/edit a task. For creation, `prefill` seeds the form and `onCreate`
  * may replace the default save (e.g. creating a task from a note).
+ * `inContext` edits a task from another workspace (Goals): its category and
+ * milestone are kept as they are, it can't be deleted there, and it offers a
+ * one-step "Complete task".
  */
 export function TaskForm({
   initial,
@@ -49,6 +52,7 @@ export function TaskForm({
   onCreate,
   hint,
   submitLabel,
+  inContext,
 }: {
   initial: Task | null;
   onDone: () => void;
@@ -56,6 +60,7 @@ export function TaskForm({
   onCreate?: (draft: TaskDraft) => Promise<void>;
   hint?: ReactNode;
   submitLabel?: string;
+  inContext?: boolean;
 }) {
   const { household } = useHousehold();
   const [d, setD] = useState<TaskDraft>(() =>
@@ -76,13 +81,17 @@ export function TaskForm({
     setD((p) => ({ ...p, [k]: v }));
   const col = collection(db(), "households", household.id, "tasks");
 
-  async function save(e: FormEvent) {
+  function save(e: FormEvent) {
     e.preventDefault();
+    return persist(d);
+  }
+
+  async function persist(values: TaskDraft) {
     if (busy) return;
     setError(null);
     let draft: TaskDraft;
     try {
-      draft = normalizeTaskDraft(d);
+      draft = normalizeTaskDraft(values);
     } catch (err) {
       setError((err as Error).message);
       return;
@@ -133,7 +142,13 @@ export function TaskForm({
           onChange={(e) => set("title", e.target.value)}
         />
       </Field>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div
+        className={
+          inContext
+            ? "grid grid-cols-2 gap-3"
+            : "grid grid-cols-2 gap-3 sm:grid-cols-4"
+        }
+      >
         <Field label="Status">
           <Select
             value={d.status}
@@ -160,28 +175,34 @@ export function TaskForm({
             ))}
           </Select>
         </Field>
-        <Field label="Category">
-          <Select
-            value={d.category}
-            onChange={(e) => set("category", e.target.value as Category)}
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Milestone">
-          <Select
-            value={d.milestone}
-            onChange={(e) => set("milestone", e.target.value as MilestoneKey)}
-          >
-            {MILESTONES.map((m) => (
-              <option key={m.key} value={m.key}>
-                {m.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {!inContext && (
+          <>
+            <Field label="Category">
+              <Select
+                value={d.category}
+                onChange={(e) => set("category", e.target.value as Category)}
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Milestone">
+              <Select
+                value={d.milestone}
+                onChange={(e) =>
+                  set("milestone", e.target.value as MilestoneKey)
+                }
+              >
+                {MILESTONES.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </>
+        )}
       </div>
       <Field label="Notes">
         <Textarea
@@ -191,8 +212,20 @@ export function TaskForm({
         />
       </Field>
       <ErrorText>{error}</ErrorText>
-      <div className="flex items-center justify-between gap-2">
-        {initial ? (
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {initial && inContext ? (
+          initial.status !== "complete" ? (
+            <Button
+              icon={Check}
+              disabled={busy || !d.title.trim()}
+              onClick={() => persist({ ...d, status: "complete" })}
+            >
+              Complete task
+            </Button>
+          ) : (
+            <span />
+          )
+        ) : initial ? (
           <Button
             variant="danger"
             icon={Trash2}
@@ -204,7 +237,7 @@ export function TaskForm({
         ) : (
           <span />
         )}
-        <div className="flex gap-2">
+        <div className="ml-auto flex gap-2">
           <Button onClick={onDone}>Cancel</Button>
           <Button
             type="submit"

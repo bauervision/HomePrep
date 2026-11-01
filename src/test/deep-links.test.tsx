@@ -339,11 +339,18 @@ describe("goal detail", () => {
     expect(detail.textContent).toContain("Uses the recommendation");
     expect(within(detail).getByText("Water jugs")).toBeTruthy();
     expect(within(detail).getByText("Water Straw")).toBeTruthy(); // not counted
+    // Inventory actions: add in place, or open the filtered inventory with a
+    // way back to this goal.
+    expect(
+      within(detail).getByRole("button", { name: "Add Water Item" }),
+    ).toBeTruthy();
     expect(
       within(detail)
-        .getByRole("link", { name: /Add Water item/ })
+        .getByRole("link", { name: "View Water Inventory" })
         .getAttribute("href"),
-    ).toBe("/inventory/?category=Water&add=1");
+    ).toBe(
+      "/inventory/?category=Water&from=%2Fgoals%2F%3Fmilestone%3D72h%26goal%3Dwater",
+    );
 
     const before = JSON.stringify(inventory());
     set(within(detail).getByLabelText(/Custom household target/), "40");
@@ -394,8 +401,22 @@ describe("goal detail", () => {
     goTo("/goals/?milestone=72h&goal=plan");
     mount(<GoalsPage />);
     const detail = await screen.findByTestId("goal-detail");
-    const task = within(detail).getAllByRole("link")[0];
-    expect(task.getAttribute("href")).toBe("/tasks/?task=seed72-plan");
+    // Planning goal: no inventory actions; its task opens in place.
+    expect(
+      within(detail).queryByRole("button", { name: /^Add .* Item$/ }),
+    ).toBeNull();
+    fireEvent.click(
+      within(detail).getByRole("button", { name: "Work on the planning task" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      (within(dialog).getByLabelText("Task") as HTMLInputElement).value,
+    ).toBe(
+      (fakeDb.get("households/h1/tasks/seed72-plan") as { title: string })
+        .title,
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(window.location.pathname).toBe("/goals/");
 
     // Selecting another goal updates the URL and keeps history.
     const length = window.history.length;
@@ -405,10 +426,15 @@ describe("goal detail", () => {
     await waitFor(() =>
       expect(
         within(screen.getByTestId("goal-detail"))
-          .getByRole("link", { name: /Add Medical item/ })
+          .getByRole("link", { name: "View Medical Inventory" })
           .getAttribute("href"),
-      ).toBe("/inventory/?category=Medical&add=1"),
+      ).toMatch(/^\/inventory\/\?category=Medical&from=/),
     );
+    expect(
+      within(screen.getByTestId("goal-detail")).getByRole("button", {
+        name: "Add Medical Item",
+      }),
+    ).toBeTruthy();
   });
 
   it("asks for a household size instead of assuming one", async () => {

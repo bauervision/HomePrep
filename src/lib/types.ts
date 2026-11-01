@@ -65,6 +65,13 @@ export interface RequirementRecord {
     title: string;
     explanation: string;
     createdAt: string;
+    /** Household task this goal is linked to (same household). */
+    taskId?: string;
+    /**
+     * confirm — the household confirms it, or links an in-stock item
+     * task    — done when the linked task is complete (no checkbox)
+     */
+    method?: "confirm" | "task";
   };
   /** Household wording for a system recommendation (original kept in code). */
   text?: { title?: string; explanation?: string };
@@ -74,6 +81,8 @@ export interface RequirementRecord {
   confirmed?: { at: string; by: string } | null;
   /** Inventory records the household selected as evidence. */
   inventoryIds?: string[];
+  /** Household notes on this requirement. */
+  notes?: string;
   updatedAt: string;
 }
 export type RequirementState = Record<string, RequirementRecord>;

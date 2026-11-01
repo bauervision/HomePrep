@@ -7,6 +7,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  ShieldAlert,
   Trash2,
   X,
 } from "lucide-react";
@@ -29,6 +30,7 @@ import {
   createCustom,
   customizeText,
   editCustom,
+  isDismissable,
   linkItem,
   markNotApplicable,
   MAX_EXPLANATION,
@@ -38,9 +40,11 @@ import {
   removeCustom,
   resetText,
   restoreApplicable,
+  setNotes,
   STATUS_LABEL,
   unconfirm,
   unlinkItem,
+  type CustomOptions,
   type EvaluatedRequirement,
   type RecordChange,
   type RequirementStatus,
@@ -49,7 +53,12 @@ import { updateRequirement } from "@/lib/goals";
 import { displayNameOf } from "@/lib/household";
 import { describeQuantity } from "@/lib/quantities";
 import { usable, type Essential } from "@/lib/readiness";
-import { TASK_STATUS_LABEL, type InventoryItem } from "@/lib/types";
+import {
+  TASK_STATUS_LABEL,
+  type Category,
+  type InventoryItem,
+  type Task,
+} from "@/lib/types";
 
 const STATUS_TONE: Record<
   RequirementStatus,
@@ -66,7 +75,7 @@ const STATUS_TONE: Record<
 
 const sectionLabel =
   "mb-1.5 text-[11px] font-semibold tracking-[0.14em] text-sage uppercase";
-const quietBtn = "h-7 px-2 text-[11px]";
+const quietBtn = "h-8 px-2 text-[11px]";
 
 /** Persists one change with busy/error state for a single control group. */
 function useChange() {
@@ -89,103 +98,143 @@ function useChange() {
   return { busy, error, run, setError };
 }
 
+/** Applies two record changes in order. */
+const both =
+  (a: RecordChange, b: RecordChange): RecordChange =>
+  (r) => {
+    const x = a(r);
+    return x && b(x);
+  };
+
+const isQuantity = (r: EvaluatedRequirement) =>
+  r.def.completion.conditions.some((c) => c.kind === "quantity");
+
+interface RowActions {
+  items: InventoryItem[];
+  tasks: Task[];
+  related: Task[];
+  today: string;
+  onOpenTask: (taskId: string) => void;
+  onAddItem: (category: Category) => void;
+  renderQuantity: () => ReactNode;
+}
+
 /**
- * Compact checklist of a goal's requirements: system recommendations, then
- * the household's own. Changes persist immediately; explanations, sources
- * and edit controls open per row.
+ * "Your Preparedness Goals": every requirement of the selected goal as a
+ * compact row — the core requirements that decide progress, then the
+ * supporting ones, then "+ New Goal". Rows open in place; changes persist
+ * immediately. Which rows are open is owned by the goal workspace so its
+ * primary action can open and focus the next requirement.
  */
 export function RequirementChecklist({
   essential: e,
-  items,
-  today,
-  skipIds = [],
-}: {
+  open,
+  onToggle,
+  ...actions
+}: RowActions & {
   essential: Essential;
-  items: InventoryItem[];
-  today: string;
-  /** Requirements already shown elsewhere (quantity targets). */
-  skipIds?: string[];
+  open: ReadonlySet<string>;
+  onToggle: (id: string) => void;
 }) {
-  const { core, supporting, confirmedOnly } = e.checklist;
-  const rows = e.checklist.requirements.filter((r) => !skipIds.includes(r.id));
-  const coreRows = rows.filter((r) => r.def.level === "core");
-  const supportRows = rows.filter((r) => r.def.level === "supporting");
+  const { core, supporting } = e.checklist;
+  const coreRows = e.checklist.requirements.filter(
+    (r) => r.def.level === "core",
+  );
+  const supportRows = e.checklist.requirements.filter(
+    (r) => r.def.level === "supporting",
+  );
+  const row = (r: EvaluatedRequirement) => (
+    <RequirementRow
+      key={r.id}
+      r={r}
+      essential={e}
+      open={open.has(r.id)}
+      onToggle={() => onToggle(r.id)}
+      {...actions}
+    />
+  );
 
   return (
-    <div data-testid="requirements">
+    <section data-testid="requirements" aria-labelledby="goal-requirements">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-        <h3 className={sectionLabel}>Requirements</h3>
-        <p className="text-[11px] text-sage" data-testid="requirement-tally">
-          {core.applicable === 0
-            ? "No core requirements apply"
-            : `${core.done} of ${core.applicable} core done`}
-          {confirmedOnly > 0 && ` · ${confirmedOnly} household-confirmed`}
+        <h3
+          id="goal-requirements"
+          tabIndex={-1}
+          className={cx(
+            sectionLabel,
+            "rounded outline-none focus-visible:ring-2 focus-visible:ring-amber",
+          )}
+        >
+          Your Preparedness Goals
+        </h3>
+        <p className="text-[11px] text-sage">
+          {core.applicable} counted toward progress
         </p>
       </div>
       {coreRows.length > 0 && (
-        <ul className="divide-y divide-line">
-          {coreRows.map((r) => (
-            <RequirementRow
-              key={r.id}
-              r={r}
-              essential={e}
-              items={items}
-              today={today}
-            />
-          ))}
+        <ul className="divide-y divide-line" aria-label="Counted requirements">
+          {coreRows.map(row)}
         </ul>
       )}
       {supportRows.length > 0 && (
         <>
-          <h3 className={cx(sectionLabel, "mt-3")}>
+          <h4 className={cx(sectionLabel, "mt-3")}>
             Also consider{" "}
             <span className="tracking-normal normal-case">
-              · {supporting.done} of {supporting.applicable} · not required for
-              the goal
+              · {supporting.done} of {supporting.applicable} · not counted
+              toward progress
             </span>
-          </h3>
-          <ul className="divide-y divide-line">
-            {supportRows.map((r) => (
-              <RequirementRow
-                key={r.id}
-                r={r}
-                essential={e}
-                items={items}
-                today={today}
-              />
-            ))}
+          </h4>
+          <ul className="divide-y divide-line" aria-label="Also consider">
+            {supportRows.map(row)}
           </ul>
         </>
       )}
-      <AddRequirement essential={e} />
-    </div>
+      <NewGoal
+        essential={e}
+        items={actions.items}
+        tasks={actions.tasks}
+        related={actions.related}
+        today={actions.today}
+      />
+    </section>
   );
 }
 
 function RequirementRow({
   r,
   essential: e,
+  open,
+  onToggle,
   items,
+  tasks,
+  related,
   today,
-}: {
+  onOpenTask,
+  onAddItem,
+  renderQuantity,
+}: RowActions & {
   r: EvaluatedRequirement;
   essential: Essential;
-  items: InventoryItem[];
-  today: string;
+  open: boolean;
+  onToggle: () => void;
 }) {
   const { user } = useHousehold();
-  const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<null | "edit" | "na">(null);
   const { busy, error, run } = useChange();
   const name = displayNameOf(user);
+  const quantity = isQuantity(r);
+  // Confirmation is one condition: where every condition is mandatory
+  // ("all"), ticking it never completes the requirement on its own.
   const canAttest = r.def.completion.conditions.some(
     (c) => c.kind === "attest",
   );
   const linkable = r.def.completion.conditions.find(
     (c) => c.kind === "inventory",
   );
-  const dismissable = r.custom || r.def.appliesIf !== undefined;
+  const dismissable = isDismissable(r.original ?? r.def, r.custom);
   const dismissed = !!r.record?.notApplicable;
+  const editable = !quantity && !r.def.safety;
   const panelId = `req-${r.id}`;
 
   const toggle = (checked: boolean) =>
@@ -194,82 +243,126 @@ function RequirementRow({
     );
 
   async function remove() {
-    if (!confirm(`Delete requirement "${r.def.title}"?`)) return;
+    if (!confirm(`Delete goal "${r.def.title}"?`)) return;
     await run(r.id, () => removeCustom);
   }
 
+  const tag = r.def.safety
+    ? "Safety"
+    : r.custom
+      ? "Custom"
+      : r.customized
+        ? "Customized"
+        : r.def.appliesIf
+          ? "If applicable"
+          : null;
+
   return (
-    <li className="py-1.5" data-testid={`requirement-${r.id}`}>
-      <div className="flex items-start gap-2">
+    <li
+      className="py-1"
+      data-testid={`requirement-${r.id}`}
+      data-status={r.status}
+    >
+      <div className="flex items-start gap-1">
         {canAttest && !dismissed ? (
-          <input
-            type="checkbox"
-            className="mt-1 size-4 shrink-0 accent-pine"
-            checked={!!r.record?.confirmed}
-            disabled={busy}
-            onChange={(ev) => toggle(ev.target.checked)}
-            aria-label={`Household confirms: ${r.def.title}`}
-          />
+          <label className="-my-0.5 grid size-9 shrink-0 cursor-pointer place-items-center">
+            <input
+              type="checkbox"
+              className="size-[18px] accent-pine"
+              checked={!!r.record?.confirmed}
+              disabled={busy}
+              onChange={(ev) => toggle(ev.target.checked)}
+              aria-label={`Household confirms: ${r.def.title}`}
+            />
+          </label>
         ) : (
-          <span
-            aria-hidden
-            className={cx(
-              "mt-1.5 size-3 shrink-0 rounded-full",
-              r.satisfied ? "bg-pine" : "border border-line-strong",
-            )}
-          />
+          <span aria-hidden className="grid size-9 shrink-0 place-items-center">
+            <span
+              className={cx(
+                "size-3 rounded-full",
+                r.satisfied ? "bg-pine" : "border border-line-strong",
+              )}
+            />
+          </span>
         )}
         <button
           type="button"
+          id={`req-toggle-${r.id}`}
           aria-expanded={open}
           aria-controls={panelId}
-          onClick={() => setOpen((o) => !o)}
-          className="min-w-0 flex-1 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-amber"
+          onClick={onToggle}
+          className="flex min-h-9 min-w-0 flex-1 items-start gap-2 rounded py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-amber"
         >
-          <span
-            className={cx(
-              "text-sm",
-              dismissed ? "text-slate line-through" : "text-ivory",
-            )}
-          >
-            {r.def.title}
-          </span>
-          {(r.custom || r.customized || r.def.appliesIf) && (
-            <span className="ml-1.5 text-[11px] text-slate">
-              {r.custom
-                ? "Custom"
-                : r.customized
-                  ? "Customized"
-                  : "If applicable"}
-            </span>
-          )}
-          {r.status !== "not-started" &&
-            r.reason !== "Confirmed by household" && (
-              <span className="block truncate text-[11px] text-sage">
-                {r.reason}
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span
+                className={cx(
+                  "text-sm",
+                  dismissed ? "text-slate line-through" : "text-ivory",
+                )}
+              >
+                {r.def.title}
               </span>
+              {tag && (
+                <span
+                  className={cx(
+                    "text-[11px]",
+                    r.def.safety ? "text-amber" : "text-slate",
+                  )}
+                >
+                  {tag}
+                </span>
+              )}
+              <Badge tone={STATUS_TONE[r.status]}>
+                {STATUS_LABEL[r.status]}
+              </Badge>
+            </span>
+            {r.status !== "not-started" &&
+              r.reason !== "Confirmed by household" && (
+                <span className="mt-0.5 block text-[11px] text-sage">
+                  {r.reason}
+                </span>
+              )}
+          </span>
+          <ChevronDown
+            size={16}
+            aria-hidden
+            className={cx(
+              "mt-0.5 shrink-0 text-slate transition-transform motion-reduce:transition-none",
+              open && "rotate-180",
             )}
+          />
         </button>
-        <Badge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
-        <ChevronDown
-          size={14}
-          aria-hidden
-          className={cx(
-            "mt-1 shrink-0 text-slate transition-transform motion-reduce:transition-none",
-            open && "rotate-180",
-          )}
-        />
       </div>
 
       {open && (
-        <div id={panelId} className="mt-2 space-y-2 pb-1 pl-6 text-xs">
+        <div id={panelId} className="mt-1 space-y-2 pb-2 pl-10 text-xs">
           {mode === "edit" ? (
-            <EditText r={r} onDone={() => setMode(null)} />
+            r.custom ? (
+              <GoalForm
+                essential={e}
+                items={items}
+                tasks={tasks}
+                related={related}
+                today={today}
+                existing={r}
+                onDone={() => setMode(null)}
+              />
+            ) : (
+              <CustomizeForm r={r} onDone={() => setMode(null)} />
+            )
           ) : (
             <>
               <p className="whitespace-pre-line text-ivory-dim">
                 {r.def.explanation}
               </p>
+              {r.def.safety && (
+                <p className="flex gap-1.5 text-amber">
+                  <ShieldAlert size={14} aria-hidden className="shrink-0" />
+                  Safety guidance: it can’t be marked not applicable or
+                  reworded.
+                </p>
+              )}
               {r.def.appliesIf && (
                 <p className="text-sage">{r.def.appliesIf}</p>
               )}
@@ -282,7 +375,8 @@ function RequirementRow({
                   <p>{r.original.explanation}</p>
                 </div>
               )}
-              {!r.satisfied && !dismissed && (
+              {quantity && renderQuantity()}
+              {!r.satisfied && !dismissed && !quantity && (
                 <p className="text-sage">
                   <span className="text-slate">Next: </span>
                   {r.def.action}
@@ -304,6 +398,12 @@ function RequirementRow({
                     ". This is core guidance, so it still counts toward the goal."}
                 </p>
               )}
+              {r.record?.notes && (
+                <p className="whitespace-pre-line text-sage">
+                  <span className="text-slate">Notes: </span>
+                  {r.record.notes}
+                </p>
+              )}
             </>
           )}
 
@@ -317,20 +417,23 @@ function RequirementRow({
                   ? (linkable.category ?? e.category)
                   : e.category
               }
+              onAddItem={onAddItem}
             />
           )}
 
-          {r.tasks.length > 0 && (
+          {r.tasks.length > 0 && mode !== "edit" && (
             <ul className="space-y-0.5">
               {r.tasks.map((t) => (
-                <li key={t.id} className="flex flex-wrap items-center gap-2">
+                <li key={t.id} className="flex flex-wrap items-center gap-x-2">
                   <span className="text-slate">Task:</span>
-                  <Link
-                    href={`/tasks/?task=${encodeURIComponent(t.id)}`}
-                    className="text-ivory hover:text-copper-light"
+                  <button
+                    type="button"
+                    aria-haspopup="dialog"
+                    onClick={() => onOpenTask(t.id)}
+                    className="min-h-8 rounded text-left text-ivory underline decoration-line-strong underline-offset-2 outline-none hover:text-copper-light focus-visible:ring-2 focus-visible:ring-amber"
                   >
                     {t.title}
-                  </Link>
+                  </button>
                   <span className="text-sage">
                     {TASK_STATUS_LABEL[t.status]}
                   </span>
@@ -346,15 +449,17 @@ function RequirementRow({
           ) : (
             mode !== "edit" && (
               <div className="flex flex-wrap gap-1.5 pt-0.5">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className={quietBtn}
-                  icon={Pencil}
-                  onClick={() => setMode("edit")}
-                >
-                  {r.custom ? "Edit" : "Customize"}
-                </Button>
+                {editable && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className={quietBtn}
+                    icon={Pencil}
+                    onClick={() => setMode("edit")}
+                  >
+                    {r.custom ? "Edit" : "Customize"}
+                  </Button>
+                )}
                 {r.customized && (
                   <Button
                     size="sm"
@@ -417,7 +522,7 @@ function Sources({ r }: { r: EvaluatedRequirement }) {
   const refs = r.def.sources.map((id) => SOURCES[id]);
   return (
     <details className="group">
-      <summary className="cursor-pointer text-[11px] text-slate select-none hover:text-sage">
+      <summary className="cursor-pointer py-1 text-[11px] text-slate select-none hover:text-sage">
         {EVIDENCE_LABEL[r.custom ? "household" : r.def.evidence]}
         {refs.length > 0 &&
           ` · ${refs.length} source${refs.length === 1 ? "" : "s"}`}
@@ -456,11 +561,13 @@ function LinkedItems({
   items,
   today,
   category,
+  onAddItem,
 }: {
   r: EvaluatedRequirement;
   items: InventoryItem[];
   today: string;
-  category: InventoryItem["category"] | undefined;
+  category: Category | undefined;
+  onAddItem: (category: Category) => void;
 }) {
   const { busy, error, run } = useChange();
   const linkedIds = r.record?.inventoryIds ?? [];
@@ -468,7 +575,6 @@ function LinkedItems({
     (i) => !linkedIds.includes(i.id),
   );
   const suggested = candidates.filter((i) => i.category === category);
-  const others = candidates.filter((i) => i.category !== category);
   const missing = linkedIds.filter((id) => !items.some((i) => i.id === id));
 
   return (
@@ -510,7 +616,7 @@ function LinkedItems({
         {candidates.length > 0 && (
           <Select
             aria-label={`Link an inventory item to ${r.def.title}`}
-            className="h-8 w-auto max-w-full text-xs"
+            className="h-9 w-auto max-w-full text-xs"
             value=""
             disabled={busy}
             onChange={(ev) => {
@@ -519,33 +625,18 @@ function LinkedItems({
             }}
           >
             <option value="">Link an inventory item…</option>
-            {suggested.length > 0 && (
-              <optgroup label={`${category} items`}>
-                {suggested.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {others.length > 0 && (
-              <optgroup label="Other items">
-                {others.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name} ({i.category})
-                  </option>
-                ))}
-              </optgroup>
-            )}
+            <ItemOptions items={candidates} category={category} />
           </Select>
         )}
         {category && (
-          <Link
-            href={`/inventory/?category=${encodeURIComponent(category)}&add=1`}
-            className="text-copper-light hover:underline"
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => onAddItem(category)}
+            className="min-h-8 rounded text-copper-light outline-none hover:underline focus-visible:ring-2 focus-visible:ring-amber"
           >
-            Add {category} item
-          </Link>
+            Add {category} Item
+          </button>
         )}
       </div>
       {suggested.length > 0 && r.linked.length === 0 && (
@@ -557,6 +648,40 @@ function LinkedItems({
       )}
       <ErrorText>{error}</ErrorText>
     </div>
+  );
+}
+
+/** Inventory options, the goal's category first. */
+function ItemOptions({
+  items,
+  category,
+}: {
+  items: InventoryItem[];
+  category: Category | undefined;
+}) {
+  const suggested = items.filter((i) => i.category === category);
+  const others = items.filter((i) => i.category !== category);
+  return (
+    <>
+      {suggested.length > 0 && (
+        <optgroup label={`${category} items`}>
+          {suggested.map((i) => (
+            <option key={i.id} value={i.id}>
+              {i.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {others.length > 0 && (
+        <optgroup label="Other items">
+          {others.map((i) => (
+            <option key={i.id} value={i.id}>
+              {i.name} ({i.category})
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </>
   );
 }
 
@@ -575,7 +700,7 @@ function UnlinkButton({
       disabled={busy}
       onClick={onClick}
       aria-label={`Unlink ${label}`}
-      className="grid size-6 place-items-center rounded text-slate outline-none hover:text-ivory focus-visible:ring-2 focus-visible:ring-amber"
+      className="grid size-8 place-items-center rounded text-slate outline-none hover:text-ivory focus-visible:ring-2 focus-visible:ring-amber"
     >
       <X size={12} aria-hidden />
     </button>
@@ -608,7 +733,7 @@ function NotApplicableForm({
           maxLength={MAX_REASON}
           placeholder="e.g. No one takes daily medication"
           onChange={(ev) => setReason(ev.target.value)}
-          className="h-8 text-xs"
+          className="h-9 text-xs"
         />
       </Field>
       <div className="flex gap-1.5">
@@ -624,37 +749,29 @@ function NotApplicableForm({
   );
 }
 
-function TextForm({
-  initialTitle,
-  initialExplanation,
-  submitLabel,
-  onSubmit,
-  onCancel,
-  children,
+/** Household wording and notes for a system recommendation. */
+function CustomizeForm({
+  r,
+  onDone,
 }: {
-  initialTitle: string;
-  initialExplanation: string;
-  submitLabel: string;
-  onSubmit: (title: string, explanation: string) => Promise<boolean>;
-  onCancel: () => void;
-  children?: ReactNode;
+  r: EvaluatedRequirement;
+  onDone: () => void;
 }) {
-  const [title, setTitle] = useState(initialTitle);
-  const [explanation, setExplanation] = useState(initialExplanation);
-  const [busy, setBusy] = useState(false);
+  const [title, setTitle] = useState(r.def.title);
+  const [explanation, setExplanation] = useState(r.def.explanation);
+  const [notes, setNotesText] = useState(r.record?.notes ?? "");
+  const { busy, error, run } = useChange();
   async function submit(ev: FormEvent) {
     ev.preventDefault();
     if (busy) return;
-    setBusy(true);
-    try {
-      await onSubmit(title, explanation);
-    } finally {
-      setBusy(false);
-    }
+    const ok = await run(r.id, () =>
+      both(customizeText(r.original!, title, explanation), setNotes(notes)),
+    );
+    if (ok) onDone();
   }
   return (
     <form onSubmit={submit} className="space-y-2">
-      <Field label="Requirement">
+      <Field label="Goal title">
         <Input
           value={title}
           maxLength={MAX_TITLE}
@@ -662,7 +779,7 @@ function TextForm({
           onChange={(ev) => setTitle(ev.target.value)}
         />
       </Field>
-      <Field label="Explanation (optional)">
+      <Field label="Description">
         <Textarea
           rows={3}
           value={explanation}
@@ -670,7 +787,18 @@ function TextForm({
           onChange={(ev) => setExplanation(ev.target.value)}
         />
       </Field>
-      {children}
+      <Field label="Notes (optional)">
+        <Textarea
+          rows={2}
+          value={notes}
+          maxLength={MAX_EXPLANATION}
+          onChange={(ev) => setNotesText(ev.target.value)}
+        />
+      </Field>
+      <p className="text-[11px] text-slate">
+        Your wording applies to your household only. The original recommendation
+        and its sources stay available, and how it is completed doesn’t change.
+      </p>
       <div className="flex gap-1.5">
         <Button
           type="submit"
@@ -680,104 +808,217 @@ function TextForm({
           loading={busy}
           disabled={!title.trim()}
         >
-          {submitLabel}
+          Save wording
         </Button>
-        <Button size="sm" variant="ghost" onClick={onCancel}>
+        <Button size="sm" variant="ghost" onClick={onDone}>
           Cancel
         </Button>
       </div>
+      <ErrorText>{error}</ErrorText>
     </form>
   );
 }
 
-function EditText({
-  r,
+/**
+ * Create or edit a household goal within the selected goal and milestone —
+ * both come from context, so they are never asked for again.
+ */
+function GoalForm({
+  essential: e,
+  items,
+  tasks,
+  related,
+  today,
+  existing,
   onDone,
 }: {
-  r: EvaluatedRequirement;
+  essential: Essential;
+  items: InventoryItem[];
+  tasks: Task[];
+  related: Task[];
+  today: string;
+  existing?: EvaluatedRequirement;
   onDone: () => void;
 }) {
-  const { error, run } = useChange();
+  const { household } = useHousehold();
+  const c = existing?.record?.custom;
+  const [title, setTitle] = useState(c?.title ?? "");
+  const [explanation, setExplanation] = useState(c?.explanation ?? "");
+  const [method, setMethod] = useState<"confirm" | "task">(
+    c?.method ?? "confirm",
+  );
+  const [taskId, setTaskId] = useState(c?.taskId ?? "");
+  const [inventoryId, setInventoryId] = useState("");
+  const [notes, setNotesText] = useState(existing?.record?.notes ?? "");
+  const { busy, error, run } = useChange();
+
+  // The goal's related tasks first, then the rest of this milestone's.
+  const others = tasks.filter(
+    (t) => t.milestone === e.milestone && !related.includes(t),
+  );
+
+  async function submit(ev: FormEvent) {
+    ev.preventDefault();
+    if (busy) return;
+    const options: CustomOptions = {
+      method,
+      taskId: taskId || null,
+      notes,
+      ...(existing ? {} : { inventoryId: inventoryId || null }),
+    };
+    const ok = existing
+      ? await run(existing.id, () => editCustom(title, explanation, options))
+      : await run(newCustomId(), () =>
+          createCustom(
+            household.requirementState,
+            e.milestone,
+            e.key,
+            title,
+            explanation,
+            new Date().toISOString(),
+            options,
+          ),
+        );
+    if (ok) onDone();
+  }
+
   return (
-    <>
-      <TextForm
-        initialTitle={r.def.title}
-        initialExplanation={r.def.explanation}
-        submitLabel={r.custom ? "Save" : "Save wording"}
-        onCancel={onDone}
-        onSubmit={async (title, explanation) => {
-          const ok = await run(r.id, () =>
-            r.custom
-              ? editCustom(title, explanation)
-              : customizeText(r.original!, title, explanation),
-          );
-          if (ok) onDone();
-          return ok;
-        }}
-      >
-        {!r.custom && (
-          <p className="text-[11px] text-slate">
-            Your wording applies to your household only. The original
-            recommendation and its sources stay available, and how it is
-            completed doesn’t change.
-          </p>
-        )}
-      </TextForm>
+    <form
+      onSubmit={submit}
+      className="space-y-2"
+      aria-label={existing ? "Edit goal" : "New goal"}
+    >
+      <Field label="Goal title">
+        <Input
+          value={title}
+          maxLength={MAX_TITLE}
+          required
+          data-autofocus
+          autoFocus={!existing}
+          onChange={(ev) => setTitle(ev.target.value)}
+        />
+      </Field>
+      <Field label="Description (optional)">
+        <Textarea
+          rows={2}
+          value={explanation}
+          maxLength={MAX_EXPLANATION}
+          onChange={(ev) => setExplanation(ev.target.value)}
+        />
+      </Field>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field label="Linked task (optional)">
+          <Select
+            value={taskId}
+            onChange={(ev) => {
+              setTaskId(ev.target.value);
+              if (!ev.target.value) setMethod("confirm");
+            }}
+          >
+            <option value="">No linked task</option>
+            {related.length > 0 && (
+              <optgroup label="Related tasks">
+                {related.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {others.length > 0 && (
+              <optgroup label="Other tasks">
+                {others.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </Select>
+        </Field>
+        <Field label="Completed by">
+          <Select
+            value={method}
+            onChange={(ev) => setMethod(ev.target.value as "confirm" | "task")}
+          >
+            <option value="confirm">
+              Household confirms (or a linked item)
+            </option>
+            <option value="task" disabled={!taskId}>
+              The linked task being completed
+            </option>
+          </Select>
+        </Field>
+      </div>
+      {!existing && (
+        <Field label="Linked inventory item (optional)">
+          <Select
+            value={inventoryId}
+            onChange={(ev) => setInventoryId(ev.target.value)}
+          >
+            <option value="">No linked item</option>
+            <ItemOptions items={usable(items, today)} category={e.category} />
+          </Select>
+        </Field>
+      )}
+      <Field label="Notes (optional)">
+        <Textarea
+          rows={2}
+          value={notes}
+          maxLength={MAX_EXPLANATION}
+          onChange={(ev) => setNotesText(ev.target.value)}
+        />
+      </Field>
+      <div className="flex gap-1.5">
+        <Button
+          type="submit"
+          size="sm"
+          variant="emerald"
+          icon={Save}
+          loading={busy}
+          disabled={!title.trim()}
+        >
+          Save goal
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onDone}>
+          Cancel
+        </Button>
+      </div>
       <ErrorText>{error}</ErrorText>
-    </>
+    </form>
   );
 }
 
-function AddRequirement({ essential: e }: { essential: Essential }) {
-  const { household } = useHousehold();
+function NewGoal({
+  essential: e,
+  ...rest
+}: {
+  essential: Essential;
+  items: InventoryItem[];
+  tasks: Task[];
+  related: Task[];
+  today: string;
+}) {
   const [open, setOpen] = useState(false);
-  const { error, run, setError } = useChange();
-
   if (!open) {
     return (
       <Button
         size="sm"
         variant="secondary"
         icon={Plus}
-        className="mt-2"
+        className="mt-2 min-h-10 w-full justify-center sm:min-h-0 sm:w-auto"
         onClick={() => setOpen(true)}
       >
-        Add requirement
+        New Goal
       </Button>
     );
   }
   return (
     <div className="mt-2 rounded-md border border-line bg-well p-3">
-      <TextForm
-        initialTitle=""
-        initialExplanation=""
-        submitLabel="Add requirement"
-        onCancel={() => {
-          setError(null);
-          setOpen(false);
-        }}
-        onSubmit={async (title, explanation) => {
-          const at = new Date().toISOString();
-          const ok = await run(newCustomId(), () =>
-            createCustom(
-              household.requirementState,
-              e.milestone,
-              e.key,
-              title,
-              explanation,
-              at,
-            ),
-          );
-          if (ok) setOpen(false);
-          return ok;
-        }}
-      >
-        <p className="text-[11px] text-slate">
-          Household requirements count toward this goal. Confirm them or link
-          inventory when they’re done.
-        </p>
-      </TextForm>
-      <ErrorText>{error}</ErrorText>
+      <p className="mb-2 text-[11px] text-slate">
+        New goal for {e.label} · counts toward this goal’s progress.
+      </p>
+      <GoalForm essential={e} {...rest} onDone={() => setOpen(false)} />
     </div>
   );
 }

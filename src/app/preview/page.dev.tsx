@@ -3,8 +3,9 @@
 // Development-only design preview (excluded from production builds via the
 // `dev.tsx` page extension). Renders real shell/onboarding/dashboard components
 // with fixture sessions and data so layouts can be checked without signing in.
-// Usage: /preview/?screen=signin|onboarding|dashboard|budget|notes|inventory-form|kit|modal
-// Dashboard also accepts &objective=7d|30d|60d|90d.
+// Usage: /preview/?screen=signin|onboarding|dashboard|goals|budget|notes|inventory-form|kit|modal
+// Dashboard also accepts &objective=7d|30d|60d|90d; goals accepts
+// &milestone=72h|7d…&goal=cooking.
 
 import type { User } from "firebase/auth";
 import {
@@ -20,7 +21,12 @@ import {
   Users,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState, type ReactNode } from "react";
+import {
+  Suspense,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { isMilestoneKey } from "@/lib/readiness";
 import { InteriorFrame, Onboarding, SignIn } from "@/components/AppShell";
 import { BudgetView } from "@/components/budget/BudgetView";
@@ -28,6 +34,7 @@ import { NotesView } from "@/components/notes/NotesView";
 import { InventoryItemForm } from "@/components/InventoryItemForm";
 import { Timestamp } from "firebase/firestore";
 import { DashboardView } from "@/components/DashboardView";
+import { GoalsView } from "@/components/goals/GoalsView";
 import { resolveProfile } from "@/lib/profile";
 import {
   SessionContext,
@@ -161,7 +168,44 @@ const TASKS: Task[] = [
     category: "Evacuation",
     seedKey: "plan",
   }),
+  task({
+    title: "Establish an emergency cooking method",
+    category: "Food",
+    milestone: "7d",
+    seedKey: "7d:cooking",
+    status: "in_progress",
+  }),
+  task({
+    title: "Inventory hygiene supplies for a week",
+    category: "Sanitation",
+    milestone: "7d",
+    seedKey: "7d:hygiene",
+  }),
 ];
+
+const GOALS_HOUSEHOLD = {
+  ...household,
+  adults: 2,
+  children: 3,
+  profileVersion: 1,
+  requirementState: {
+    "7d.cooking.no-cook": {
+      confirmed: { by: "Preview Member", at: "2026-10-29T12:00:00.000Z" },
+      updatedAt: "2026-10-29T12:00:00.000Z",
+    },
+    "custom-preview1": {
+      custom: {
+        milestone: "7d" as const,
+        goal: "cooking",
+        title: "Keep matches in a waterproof container",
+        explanation: "By the camp stove in the garage.",
+        createdAt: "2026-10-29T12:00:00.000Z",
+      },
+      notes: "Check before winter.",
+      updatedAt: "2026-10-29T12:00:00.000Z",
+    },
+  },
+};
 
 const PURCHASES: Purchase[] = [
   {
@@ -343,6 +387,27 @@ const ready: SessionState = {
   seedError: null,
 };
 
+/**
+ * Renders only in the browser. The Goals workspace reads the URL and the
+ * member's last goal, which the static prerender can't know.
+ */
+function ClientOnly({ children }: { children: ReactNode }) {
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
+  return mounted ? children : null;
+}
+
+const goalsReady: SessionState = {
+  status: "ready",
+  user,
+  household: GOALS_HOUSEHOLD,
+  member,
+  seedError: null,
+};
+
 function Kit() {
   return (
     <InteriorFrame>
@@ -444,6 +509,20 @@ function Screen() {
         <Session state={ready}>
           <InteriorFrame>
             <PreviewDashboard />
+          </InteriorFrame>
+        </Session>
+      );
+    case "goals":
+      return (
+        <Session state={goalsReady}>
+          <InteriorFrame>
+            <ClientOnly>
+              <GoalsView
+                inv={{ data: INVENTORY, loading: false, error: null }}
+                tasks={{ data: TASKS, loading: false, error: null }}
+                today={TODAY}
+              />
+            </ClientOnly>
           </InteriorFrame>
         </Session>
       );
