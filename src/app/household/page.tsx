@@ -1,16 +1,21 @@
 "use client";
 
-import { Check, Copy, Save, Settings, UserPlus, Users } from "lucide-react";
 import {
-  collection,
+  LogOut,
+  Save,
+  Settings,
+  UserMinus,
+  UserPlus,
+  Users,
+} from "lucide-react";
+import {
   doc,
   onSnapshot,
-  query,
   serverTimestamp,
   updateDoc,
-  where,
 } from "firebase/firestore";
 import { useEffect, useState, type FormEvent } from "react";
+import { InvitationLink } from "@/components/InvitationLink";
 import { useHousehold } from "@/components/SessionProvider";
 import {
   Badge,
@@ -20,45 +25,29 @@ import {
   Field,
   Input,
   PageHeader,
+  Select,
 } from "@/components/ui";
 import { db } from "@/lib/firebase";
-import { createInvite, revokeInvite } from "@/lib/household";
-import { useCollection } from "@/lib/hooks";
+import {
+  createInvitation,
+  expiresAt,
+  InvitationError,
+  invitationState,
+  normalizeEmail,
+  removeMember,
+  revokeInvitation,
+  setMemberRole,
+} from "@/lib/household";
+import { useCollection, useWhere } from "@/lib/hooks";
 import { MAX_MEMBERS, profileFields, resolveProfile } from "@/lib/profile";
 import {
   CONSIDERATIONS,
+  ROLE_LABEL,
   type Consideration,
-  type Invite,
+  type Invitation,
   type Member,
   type PetInfo,
 } from "@/lib/types";
-
-function useInvites(householdId: string) {
-  const [state, setState] = useState<{
-    hid: string;
-    data: Invite[];
-    error: string | null;
-  } | null>(null);
-  useEffect(() => {
-    const q = query(
-      collection(db(), "invites"),
-      where("householdId", "==", householdId),
-    );
-    return onSnapshot(
-      q,
-      (s) =>
-        setState({
-          hid: householdId,
-          data: s.docs.map((d) => ({ id: d.id, ...d.data() }) as Invite),
-          error: null,
-        }),
-      (e) => setState({ hid: householdId, data: [], error: e.message }),
-    );
-  }, [householdId]);
-  return state?.hid === householdId
-    ? state
-    : { data: [] as Invite[], error: null };
-}
 
 const wholeNumber = (v: string, min: number, max: number) =>
   Math.max(min, Math.min(max, Math.round(Number(v)) || min));
@@ -220,94 +209,161 @@ function SettingsForm() {
   );
 }
 
-function Invites() {
-  const { household, user } = useHousehold();
-  const invites = useInvites(household.id);
-  const [created, setCreated] = useState<string | null>(null);
+/** Whether the household has its platform registration (0.7.0 bootstrap). */
+function useRegistered(householdId: string) {
+  const [state, setState] = useState<{ hid: string; ok: boolean } | null>(null);
+  useEffect(() => {
+    return onSnapshot(
+      doc(db(), "registrations", householdId),
+      (s) => setState({ hid: householdId, ok: s.exists() }),
+      () => setState({ hid: householdId, ok: false }),
+    );
+  }, [householdId]);
+  return state?.hid === householdId ? state.ok : null;
+}
+
+function Invitations() {
+  const { household, user, member } = useHousehold();
+  const isOwner = member.role === "owner";
+  const registered = useRegistered(household.id);
+  const invitations = useWhere<Invitation>("invitations", {
+    type: "member",
+    householdId: household.id,
+  });
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"member" | "co-owner">("member");
+  const [shown, setShown] = useState<{ id: string; email: string } | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [now] = useState(() => Date.now());
 
-  const link = created ? `${window.location.origin}/join/?code=${created}` : "";
-  const active = invites.data
-    .filter((i) => !i.usedBy && i.expiresAt.toMillis() > now)
-    .sort((a, b) => b.expiresAt.toMillis() - a.expiresAt.toMillis());
+  const pending = invitations.data
+    .filter((i) => invitationState(i, now) === "pending")
+    .sort(
+      (a, b) =>
+        (b.createdAt?.toMillis() ?? Infinity) -
+        (a.createdAt?.toMillis() ?? Infinity),
+    );
 
-  async function create() {
+  async function create(e: FormEvent) {
+    e.preventDefault();
     setBusy(true);
     setError(null);
-    setCopied(false);
     try {
-      setCreated(await createInvite(user, household.id));
+      const id = await createInvitation(user, {
+        type: "member",
+        email,
+        role: isOwner ? role : "member",
+        householdId: household.id,
+        householdName: household.name,
+      });
+      setShown({ id, email: normalizeEmail(email) });
+      setEmail("");
     } catch (err) {
-      setError((err as Error).message);
+      setError(
+        err instanceof InvitationError
+          ? err.message
+          : `Couldn’t create the invitation: ${(err as Error).message}`,
+      );
     } finally {
       setBusy(false);
     }
   }
 
+  async function revoke(i: Invitation) {
+    if (!confirm(`Revoke the invitation for ${i.email}?`)) return;
+    setError(null);
+    try {
+      await revokeInvitation(user, i);
+      if (shown?.id === i.id) setShown(null);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  if (registered === false)
+    return (
+      <p className="text-sm text-sage">
+        Inviting family becomes available once this household’s registration is
+        set up by the HomePrep administrator.
+      </p>
+    );
+
   return (
     <div className="space-y-3">
-      <p className="text-sm text-sage">
-        Invite another adult. Each code works once, for one Google account, and
-        expires in 7 days.
-      </p>
-      <Button variant="copper" icon={UserPlus} onClick={create} loading={busy}>
-        Create invite
-      </Button>
-      {created && (
-        <div className="space-y-2 rounded-md border border-pine/35 bg-pine/[0.06] p-3">
-          <div className="font-mono text-base tracking-wider text-[#7fd8ad]">
-            {created}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              readOnly
-              value={link}
-              onFocus={(e) => e.target.select()}
-              className="font-mono text-xs"
-            />
-            <Button
-              icon={copied ? Check : Copy}
-              onClick={() =>
-                navigator.clipboard.writeText(link).then(() => setCopied(true))
-              }
+      <form onSubmit={create} className="space-y-3">
+        <p className="text-sm text-sage">
+          Invite someone by their Google email. The invitation works only for
+          that account, once, and expires in 7 days.
+        </p>
+        <Field label="Email">
+          <Input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="off"
+          />
+        </Field>
+        {isOwner && (
+          <Field label="Role">
+            <Select
+              value={role}
+              onChange={(e) => setRole(e.target.value as "member" | "co-owner")}
             >
-              {copied ? "Copied" : "Copy link"}
-            </Button>
-          </div>
-          <p className="text-[11px] text-slate">
-            Share privately. Anyone with this code can join until it is used.
-          </p>
-        </div>
-      )}
-      <ErrorText>{error || invites.error}</ErrorText>
-      {active.length > 0 && (
+              <option value="member">Member</option>
+              <option value="co-owner">Co-owner</option>
+            </Select>
+          </Field>
+        )}
+        <Button
+          type="submit"
+          variant="copper"
+          icon={UserPlus}
+          loading={busy}
+          disabled={!email.trim() || registered === null}
+        >
+          Create invitation
+        </Button>
+      </form>
+      {shown && <InvitationLink id={shown.id} email={shown.email} />}
+      <ErrorText>{error || invitations.error}</ErrorText>
+      {pending.length > 0 && (
         <div>
           <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-sage uppercase">
-            Open invites
+            Pending invitations
           </h3>
-          <ul className="divide-y divide-line">
-            {active.map((i) => (
-              <li
-                key={i.id}
-                className="flex items-center justify-between gap-2 py-1.5 text-sm"
-              >
-                <span className="font-mono text-xs text-ivory-dim">{i.id}</span>
-                <span className="text-[11px] text-slate">
-                  by {i.createdByName} · expires{" "}
-                  {i.expiresAt.toDate().toLocaleDateString()}
-                </span>
-                <Button
-                  size="sm"
-                  variant="danger"
-                  onClick={() =>
-                    revokeInvite(i.id).catch((e: Error) => setError(e.message))
-                  }
-                >
-                  Revoke
-                </Button>
+          <ul className="divide-y divide-line" data-testid="member-invitations">
+            {pending.map((i) => (
+              <li key={i.id} className="space-y-1 py-1.5 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 [overflow-wrap:anywhere] text-ivory-dim">
+                    {i.email}
+                  </span>
+                  <span className="flex gap-1.5">
+                    <Button
+                      size="sm"
+                      onClick={() => setShown({ id: i.id, email: i.email })}
+                    >
+                      Show link
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => revoke(i)}
+                    >
+                      Revoke
+                    </Button>
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate">
+                  {ROLE_LABEL[i.role]} · by {i.createdByName} · expires{" "}
+                  {expiresAt(i)
+                    ? new Date(expiresAt(i)!).toLocaleDateString()
+                    : "—"}
+                </div>
               </li>
             ))}
           </ul>
@@ -317,14 +373,121 @@ function Invites() {
   );
 }
 
+function MemberRow({
+  m,
+  self,
+  viewer,
+}: {
+  m: Member;
+  self: boolean;
+  viewer: Member;
+}) {
+  const { household } = useHousehold();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const viewerOwner = viewer.role === "owner";
+  const canChangeRole = viewerOwner && !self && m.role !== "owner";
+  const canRemove =
+    !self &&
+    m.role !== "owner" &&
+    (viewerOwner || (viewer.role === "co-owner" && m.role === "member"));
+  const canLeave = self && m.role !== "owner";
+
+  async function act(fn: () => Promise<void>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li className="py-1.5" data-testid={`member-${m.uid}`}>
+      <div className="flex items-center gap-2.5">
+        {m.photoURL ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={m.photoURL}
+            alt=""
+            className="size-7 rounded-full"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <span className="grid size-7 place-items-center rounded-full bg-white/10 text-xs">
+            {m.displayName.slice(0, 1)}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm">
+            {m.displayName}
+            {self && <span className="text-slate"> (you)</span>}
+          </div>
+          <div className="truncate text-[11px] text-slate">{m.email}</div>
+        </div>
+        {canChangeRole ? (
+          <Select
+            aria-label={`Role for ${m.displayName}`}
+            className="h-8 w-auto text-xs"
+            value={m.role}
+            disabled={busy}
+            onChange={(e) =>
+              act(() =>
+                setMemberRole(
+                  household.id,
+                  m.uid,
+                  e.target.value as "member" | "co-owner",
+                ),
+              )
+            }
+          >
+            <option value="member">Member</option>
+            <option value="co-owner">Co-owner</option>
+          </Select>
+        ) : (
+          <Badge tone={m.role === "member" ? "neutral" : "info"}>
+            {ROLE_LABEL[m.role] ?? m.role}
+          </Badge>
+        )}
+      </div>
+      {(canRemove || canLeave) && (
+        <div className="mt-1 flex justify-end">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-[11px]"
+            icon={canLeave ? LogOut : UserMinus}
+            disabled={busy}
+            onClick={() => {
+              const ok = confirm(
+                canLeave
+                  ? `Leave ${household.name}? You’ll need a new invitation to come back.`
+                  : `Remove ${m.displayName} from ${household.name}?`,
+              );
+              if (ok) void act(() => removeMember(household.id, m.uid));
+            }}
+          >
+            {canLeave ? "Leave household" : "Remove"}
+          </Button>
+        </div>
+      )}
+      <ErrorText>{error}</ErrorText>
+    </li>
+  );
+}
+
 export default function HouseholdPage() {
-  const { household, user } = useHousehold();
+  const { household, user, member } = useHousehold();
   const members = useCollection<Member & { id: string }>(
     ["households", household.id, "members"],
     {
       orderBy: "joinedAt",
     },
   );
+  const manager = member.role === "owner" || member.role === "co-owner";
 
   return (
     <>
@@ -332,40 +495,29 @@ export default function HouseholdPage() {
       <div className="grid gap-3 lg:grid-cols-3">
         <Card title={`Members (${members.data.length})`} icon={Users}>
           <ErrorText>{members.error}</ErrorText>
-          <ul className="space-y-2">
+          <ul className="divide-y divide-line">
             {members.data.map((m) => (
-              <li key={m.id} className="flex items-center gap-2.5">
-                {m.photoURL ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={m.photoURL}
-                    alt=""
-                    className="size-7 rounded-full"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <span className="grid size-7 place-items-center rounded-full bg-white/10 text-xs">
-                    {m.displayName.slice(0, 1)}
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm">
-                    {m.displayName}
-                    {m.uid === user.uid && (
-                      <span className="text-slate"> (you)</span>
-                    )}
-                  </div>
-                  <div className="truncate text-[11px] text-slate">
-                    {m.email}
-                  </div>
-                </div>
-                {m.role === "owner" && <Badge>Owner</Badge>}
-              </li>
+              <MemberRow
+                key={m.id}
+                m={m}
+                self={m.uid === user.uid}
+                viewer={member}
+              />
             ))}
           </ul>
+          <p className="mt-2 text-[11px] text-slate">
+            Owner manages the household and its co-owners. Co-owners invite and
+            remove members. Members use and update the plan.
+          </p>
         </Card>
-        <Card title="Invite a member" icon={UserPlus}>
-          <Invites />
+        <Card title="Invite family" icon={UserPlus}>
+          {manager ? (
+            <Invitations />
+          ) : (
+            <p className="text-sm text-sage">
+              Ask the owner or a co-owner to invite family members.
+            </p>
+          )}
         </Card>
         <Card title="Settings" icon={Settings}>
           <SettingsForm />

@@ -14,8 +14,12 @@ import type { Category, MilestoneKey } from "./types";
  * no quantity is set where the source sets none.
  */
 
-/** Bump when definitions change in a way households should re-review. */
-export const BASELINE_VERSION = 1;
+/**
+ * Bump when definitions change in a way households should re-review. A
+ * definition records the version that introduced it (`since`) and, when its
+ * completion rules changed later, the version of that revision (`revised`).
+ */
+export const BASELINE_VERSION = 2;
 
 /** Date the official pages below were last read and checked. */
 export const SOURCES_REVIEWED = "2026-10-31";
@@ -115,9 +119,18 @@ export type Condition =
   /**
    * A household-selected inventory record that is in stock and not expired.
    * Never inferred from the category alone; `category` only suggests items
-   * and presets "Add item".
+   * and presets "Add item". A link is evidence the household selected, not
+   * proof: it supports the requirement on its own only when `sufficient`
+   * (the requirement names one kind of item). Otherwise the household must
+   * also confirm it — and when the requirement `covers` several things, every
+   * one of them.
    */
-  | { kind: "inventory"; category?: Category }
+  | {
+      kind: "inventory";
+      category?: Category;
+      sufficient?: true;
+      covers?: string[];
+    }
   /**
    * A task is complete: a starter task by seedKey, or the specific task a
    * household goal is linked to.
@@ -165,7 +178,13 @@ export interface RequirementDef {
   evidence: EvidenceClass;
   /** Baseline version that introduced this definition. */
   since: number;
+  /** Latest baseline version that changed how it is completed, and why. */
+  revised?: { version: number; note: string };
 }
+
+/** Baseline version a definition was last added or changed in. */
+export const defVersion = (d: RequirementDef) =>
+  Math.max(d.since, d.revised?.version ?? 0);
 
 const ALL: MilestoneKey[] = ["72h", "7d", "30d", "60d", "90d"];
 const any = (...conditions: Condition[]): Completion => ({
@@ -173,10 +192,28 @@ const any = (...conditions: Condition[]): Completion => ({
   conditions,
 });
 const attest: Condition = { kind: "attest" };
+/** A linked item must be confirmed by the household before it counts. */
 const linkFrom = (category: Category): Condition => ({
   kind: "inventory",
   category,
 });
+/** One linked, in-stock item of this kind supports the requirement. */
+const itemFrom = (category: Category): Condition => ({
+  kind: "inventory",
+  category,
+  sufficient: true,
+});
+/** Linked items must be confirmed to cover every listed component. */
+const allOf = (category: Category, ...covers: string[]): Condition => ({
+  kind: "inventory",
+  category,
+  covers,
+});
+/** Revision 2: a linked item alone no longer completes these requirements. */
+const LINKS_NEED_CONFIRMATION = {
+  version: 2,
+  note: "A linked item no longer completes this on its own. Confirm that what you have covers it.",
+};
 const task = (seedKey: string): Condition => ({ kind: "task", seedKey });
 
 type Def = Omit<RequirementDef, "since" | "milestones"> & {
@@ -232,7 +269,7 @@ const WATER_FOOD: Def[] = [
       "Review the treatment methods, or record a filter as equipment in Inventory.",
     basis: "capability",
     level: "supporting",
-    completion: any(linkFrom("Water"), attest),
+    completion: any(itemFrom("Water"), attest),
     sources: ["readyWater"],
     evidence: "official",
   },
@@ -288,11 +325,15 @@ const WATER_FOOD: Def[] = [
     title: "Manual can opener and eating utensils",
     explanation:
       "Ready.gov lists a manual can opener in the basic kit and says to include eating utensils.",
-    action: "Link the item from Inventory, or confirm you have one.",
+    action: "Confirm you have both. Link them from Inventory to keep track.",
     basis: "capability",
     level: "supporting",
     appliesIf: "Applies if your food supply includes cans without pull tabs.",
-    completion: any(linkFrom("Food"), attest),
+    completion: any(
+      allOf("Food", "Manual can opener", "Eating utensils"),
+      attest,
+    ),
+    revised: LINKS_NEED_CONFIRMATION,
     sources: ["readyKit", "readyFood"],
     evidence: "official",
   },
@@ -323,7 +364,7 @@ const MEDICAL_72: Def[] = [
     action: "Link your first aid kit from Inventory, or confirm you have one.",
     basis: "capability",
     level: "core",
-    completion: any(linkFrom("Medical"), attest),
+    completion: any(itemFrom("Medical"), attest),
     sources: ["readyKit"],
     evidence: "official",
   },
@@ -378,10 +419,12 @@ const POWER_72: Def[] = [
     title: "Flashlights for every household member",
     explanation:
       "Ready.gov lists a flashlight in the basic kit and recommends flashlights for every household member during power outages.",
-    action: "Link your flashlights from Inventory, or confirm.",
+    action:
+      "Confirm there is a flashlight for everyone. Link them from Inventory to keep track.",
     basis: "per-person",
     level: "core",
     completion: any(linkFrom("Power"), attest),
+    revised: LINKS_NEED_CONFIRMATION,
     sources: ["readyKit", "readyPower"],
     evidence: "official",
   },
@@ -394,7 +437,7 @@ const POWER_72: Def[] = [
     action: "Link batteries from Inventory, or confirm.",
     basis: "capability",
     level: "core",
-    completion: any(linkFrom("Power"), attest),
+    completion: any(itemFrom("Power"), attest),
     sources: ["readyKit"],
     evidence: "official",
   },
@@ -404,10 +447,12 @@ const POWER_72: Def[] = [
     title: "Phone chargers and a backup battery",
     explanation:
       "Ready.gov lists a cell phone with chargers and a backup battery, and suggests a portable charger or power bank for outages.",
-    action: "Link a power bank from Inventory, or confirm.",
+    action:
+      "Confirm you have chargers and a backup battery. Link them from Inventory to keep track.",
     basis: "capability",
     level: "core",
-    completion: any(linkFrom("Power"), attest),
+    completion: any(allOf("Power", "Phone chargers", "Backup battery"), attest),
+    revised: LINKS_NEED_CONFIRMATION,
     sources: ["readyKit", "readyPower"],
     evidence: "official",
   },
@@ -437,7 +482,7 @@ const COMMS_72: Def[] = [
     action: "Link your radio from Inventory, or confirm.",
     basis: "capability",
     level: "core",
-    completion: any(linkFrom("Communications"), attest),
+    completion: any(itemFrom("Communications"), attest),
     sources: ["readyKit"],
     evidence: "official",
   },
@@ -476,10 +521,15 @@ const SANITATION_72: Def[] = [
     title: "Towelettes, garbage bags and plastic ties",
     explanation:
       "Ready.gov lists moist towelettes, garbage bags and plastic ties for personal sanitation. Toilet paper alone does not cover this.",
-    action: "Link the supplies from Inventory, or confirm.",
+    action:
+      "Confirm you have all three. Link them from Inventory to keep track.",
     basis: "per-household",
     level: "core",
-    completion: any(linkFrom("Sanitation"), attest),
+    completion: any(
+      allOf("Sanitation", "Moist towelettes", "Garbage bags", "Plastic ties"),
+      attest,
+    ),
+    revised: LINKS_NEED_CONFIRMATION,
     sources: ["readyKit"],
     evidence: "official",
   },
@@ -489,10 +539,15 @@ const SANITATION_72: Def[] = [
     title: "Soap, hand sanitizer and hygiene items",
     explanation:
       "Ready.gov suggests soap, hand sanitizer, disinfecting wipes, and feminine and personal hygiene items, based on your needs.",
-    action: "Link the supplies from Inventory, or confirm.",
+    action:
+      "Confirm your household has what it needs. Link the supplies from Inventory to keep track.",
     basis: "per-household",
     level: "core",
-    completion: any(linkFrom("Sanitation"), attest),
+    completion: any(
+      allOf("Sanitation", "Soap", "Hand sanitizer", "Hygiene items"),
+      attest,
+    ),
+    revised: LINKS_NEED_CONFIRMATION,
     sources: ["readyKit"],
     evidence: "official",
   },
@@ -644,11 +699,13 @@ const COOKING_7: Def[] = [
     title: "Carbon monoxide detectors",
     explanation:
       "Install battery-operated or battery-backup CO detectors near every sleeping area and on every level of your home.",
-    action: "Link the detectors from Inventory, or confirm.",
+    action:
+      "Confirm working detectors are installed. Link them from Inventory to keep track.",
     basis: "capability",
     level: "core",
     safety: true,
     completion: any(linkFrom("Safety"), attest),
+    revised: LINKS_NEED_CONFIRMATION,
     sources: ["cdcCo", "readyPower"],
     evidence: "official",
   },
@@ -675,10 +732,22 @@ const HYGIENE_7: Def[] = [
     title: "A week of hygiene supplies",
     explanation:
       "Soap, hand sanitizer, disinfecting wipes, and feminine and personal hygiene items for a week. HomePrep sets no quantity; size it to your household.",
-    action: "Link the supplies from Inventory, or confirm.",
+    action:
+      "Confirm you have a week of supplies. Link them from Inventory to keep track.",
     basis: "per-person",
     level: "core",
-    completion: any(linkFrom("Sanitation"), task("7d:hygiene"), attest),
+    completion: any(
+      allOf(
+        "Sanitation",
+        "Soap",
+        "Hand sanitizer",
+        "Disinfecting wipes",
+        "Hygiene items",
+      ),
+      task("7d:hygiene"),
+      attest,
+    ),
+    revised: LINKS_NEED_CONFIRMATION,
     sources: ["readyKit"],
     evidence: "derived",
   },
@@ -767,7 +836,7 @@ const CHARGING_7: Def[] = [
       "Link a charger or power bank, complete the charging task, or confirm.",
     basis: "capability",
     level: "core",
-    completion: any(linkFrom("Power"), task("7d:charging"), attest),
+    completion: any(itemFrom("Power"), task("7d:charging"), attest),
     sources: ["readyPower", "readyKit"],
     evidence: "official",
   },
@@ -811,7 +880,7 @@ const COMMS_7: Def[] = [
     action: "Link a radio, complete the communications task, or confirm.",
     basis: "capability",
     level: "core",
-    completion: any(linkFrom("Communications"), task("7d:comms"), attest),
+    completion: any(itemFrom("Communications"), task("7d:comms"), attest),
     sources: ["readyKit", "readyPlan"],
     evidence: "derived",
   },

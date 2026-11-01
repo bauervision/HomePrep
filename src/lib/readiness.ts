@@ -1,4 +1,9 @@
-import { baselineFor, taskRequirement, type RequirementDef } from "./baseline";
+import {
+  baselineFor,
+  defVersion,
+  taskRequirement,
+  type RequirementDef,
+} from "./baseline";
 import {
   evaluateGoal,
   type EvalContext,
@@ -21,7 +26,13 @@ import {
   type RequirementBasis,
   type ResolvedTarget,
 } from "./requirements";
-import type { Category, InventoryItem, MilestoneKey, Task } from "./types";
+import type {
+  BaselineReviews,
+  Category,
+  InventoryItem,
+  MilestoneKey,
+  Task,
+} from "./types";
 
 export { isExpired };
 
@@ -142,13 +153,19 @@ export interface Essential {
   resolved?: ResolvedTarget;
   /**
    * met    — every applicable core requirement is satisfied
-   * review — not met, but it was met under the earlier, simpler rule (or a
-   *          linked record changed); reassess against the current baseline
+   * review — not met, and the recommendations changed since the household
+   *          last relied on them (it was met under the earlier rule, or a
+   *          later baseline changed it) and the household hasn't
+   *          acknowledged the change yet
    * open   — not met
+   * Review is about acknowledging the baseline, never about completion:
+   * acknowledging it leaves every requirement as it is.
    */
   status: "met" | "open" | "review";
   /** Why the goal needs review, when it does. */
   reviewNote?: string;
+  /** What changed, when the goal needs review. */
+  review?: BaselineReview;
   /** Requirement-level evaluation shared by Dashboard and Goals. */
   checklist: GoalChecklist;
 }
@@ -400,6 +417,90 @@ export const OBJECTIVE_ESSENTIALS: Record<MilestoneKey, EssentialDef[]> = {
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
+/** Key of a goal's acknowledgment in `Household.baselineReviews`. */
+export const reviewKey = (milestone: MilestoneKey, goal: string) =>
+  `${milestone}.${goal}`;
+
+/** Latest baseline version that added or changed one of the goal's definitions. */
+export const goalBaselineVersion = (defs: RequirementDef[]) =>
+  defs.reduce((v, d) => Math.max(v, defVersion(d)), 1);
+
+export interface BaselineChange {
+  id: string;
+  title: string;
+  kind: "added" | "changed";
+  note?: string;
+}
+
+export interface BaselineReview {
+  key: string;
+  /** Baseline version to acknowledge. */
+  version: number;
+  /** Version the household last acknowledged; 0 if never. */
+  acknowledged: number;
+  /** Why the status changed. */
+  why: string;
+  /** Requirements added or changed since the acknowledged version. */
+  changes: BaselineChange[];
+}
+
+/**
+ * Whether a goal needs its baseline reviewed. It does when it isn't met, the
+ * household hasn't acknowledged the current version of its recommendations,
+ * and it had relied on an earlier version: either it was met under the
+ * earlier rule, or the household acknowledged an earlier baseline that has
+ * since changed. A goal that was never met and never reviewed is just open.
+ */
+export function baselineReview(
+  milestone: MilestoneKey,
+  goal: string,
+  defs: RequirementDef[],
+  reviews: BaselineReviews | undefined,
+  legacy: string | null,
+  checklist: GoalChecklist,
+): BaselineReview | null {
+  const key = reviewKey(milestone, goal);
+  const version = goalBaselineVersion(defs);
+  const acknowledged = reviews?.[key]?.version ?? 0;
+  if (
+    checklist.complete ||
+    acknowledged >= version ||
+    (!legacy && acknowledged === 0)
+  )
+    return null;
+  const { core } = checklist;
+  const why =
+    acknowledged === 0
+      ? `Earlier versions of HomePrep marked this goal met because ${legacy}. The updated recommendations list ${core.applicable} core requirements; ${core.done} are done.`
+      : `The recommendations for this goal changed after you last reviewed them. ${core.done} of ${core.applicable} core requirements are done.`;
+  return {
+    key,
+    version,
+    acknowledged,
+    why,
+    changes: defs
+      .filter((d) => defVersion(d) > acknowledged)
+      .map((d) => ({
+        id: d.id,
+        title: d.title,
+        kind: d.since > acknowledged ? "added" : "changed",
+        ...(d.since <= acknowledged && d.revised
+          ? { note: d.revised.note }
+          : {}),
+      })),
+  };
+}
+
+/** Status, note and review details for a goal (shared by every essential). */
+function goalStatus(
+  review: BaselineReview | null,
+  met: boolean,
+): Pick<Essential, "status" | "reviewNote" | "review"> {
+  if (met) return { status: "met" };
+  if (!review) return { status: "open" };
+  return { status: "review", reviewNote: review.why, review };
+}
+
 /** Essentials for one objective, each derived only from inventory or task status. */
 function quantityEssential(
   def: EssentialDef,
@@ -408,6 +509,7 @@ function quantityEssential(
   current: number,
   plan: PlanInput,
   checklist: GoalChecklist,
+  review: (legacy: string | null) => BaselineReview | null,
 ): Essential {
   const policy = QUANTITY_POLICIES[id];
   const resolved = resolveTarget(id, m, plan);
@@ -437,13 +539,10 @@ function quantityEssential(
   return {
     ...base,
     met,
-    status: met ? "met" : quantityMet ? "review" : "open",
-    ...(quantityMet && !met
-      ? {
-          reviewNote:
-            "The quantity target is reached, but another core requirement for this goal is still open.",
-        }
-      : {}),
+    ...goalStatus(
+      review(quantityMet ? `the ${policy.unit} target was reached` : null),
+      met,
+    ),
     detail: `${fmt(current)} / ${fmt(t)} ${policy.unit}`,
     need: quantityMet
       ? nextStep(checklist)
@@ -497,7 +596,7 @@ export function objectiveEssentials(
   const w = waterGallons(items, today).amount;
   const f = foodMeals(items, today).amount;
   const live = usable(items, today);
-  const state = toPlan(plan).requirements;
+  const { requirements: state, reviews } = toPlan(plan);
   const ctx: EvalContext = {
     items,
     tasks,
@@ -510,17 +609,14 @@ export function objectiveEssentials(
 
   return OBJECTIVE_ESSENTIALS[objective].map((def): Essential => {
     const ev = def.evidence;
-    const checklist = evaluateGoal(
-      essentialRequirements(objective, def),
-      objective,
-      def.key,
-      state,
-      ctx,
-    );
+    const defs = essentialRequirements(objective, def);
+    const checklist = evaluateGoal(defs, objective, def.key, state, ctx);
+    const review = (legacy: string | null) =>
+      baselineReview(objective, def.key, defs, reviews, legacy, checklist);
     if (ev.kind === "water")
-      return quantityEssential(def, "water", m, w, plan, checklist);
+      return quantityEssential(def, "water", m, w, plan, checklist, review);
     if (ev.kind === "food")
-      return quantityEssential(def, "food", m, f, plan, checklist);
+      return quantityEssential(def, "food", m, f, plan, checklist, review);
 
     // Earlier rule: any in-stock item in the category, or the starter task.
     const tk =
@@ -530,10 +626,6 @@ export function objectiveEssentials(
         ? live.some((i) => i.category === ev.category)
         : tk?.status === "complete";
     const met = checklist.complete;
-    const flagged = checklist.requirements.find(
-      (r) => r.counted && r.status === "needs-review",
-    );
-    const status = met ? "met" : legacyMet || flagged ? "review" : "open";
     const { core } = checklist;
     return {
       key: def.key,
@@ -544,16 +636,16 @@ export function objectiveEssentials(
         ? { category: ev.category }
         : { seedKey: ev.seedKey }),
       met,
-      status,
-      ...(status === "review"
-        ? {
-            reviewNote: flagged
-              ? `${flagged.def.title}: ${flagged.reason}.`
-              : ev.kind === "inventory"
-                ? `Previously met by recorded ${ev.category} items. The updated baseline lists ${core.applicable} core requirements; ${core.done} are done.`
-                : `Previously met by the completed starter task. The updated baseline lists ${core.applicable} core requirements; ${core.done} are done.`,
-          }
-        : {}),
+      ...goalStatus(
+        review(
+          !legacyMet
+            ? null
+            : ev.kind === "inventory"
+              ? `you had recorded ${ev.category} items`
+              : "its starter task was complete",
+        ),
+        met,
+      ),
       detail:
         core.applicable === 0
           ? "Not applicable"

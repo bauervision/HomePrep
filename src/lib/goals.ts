@@ -57,6 +57,33 @@ export async function updateRequirement(
 }
 
 /**
+ * Records that the household reviewed version `version` of a goal's
+ * recommendations (key: `${milestone}.${goal}`). Only `baselineReviews`
+ * changes; requirement records, inventory and tasks are untouched, so nothing
+ * becomes complete by acknowledging.
+ */
+export async function acknowledgeBaseline(
+  householdId: string,
+  key: string,
+  version: number,
+  by: string,
+) {
+  const ref = doc(db(), "households", householdId);
+  await runTransaction(db(), async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error("Household not found.");
+    const h = snap.data() as Household;
+    tx.update(ref, {
+      baselineReviews: {
+        ...h.baselineReviews,
+        [key]: { version, at: new Date().toISOString(), by },
+      },
+      updatedAt: serverTimestamp(),
+    });
+  });
+}
+
+/**
  * Tasks that move an essential forward: its verifying starter task, plus open
  * tasks for the same milestone and inventory category.
  */

@@ -1,6 +1,10 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
+import {
+  connectFirestoreEmulator,
+  getFirestore,
+  type Firestore,
+} from "firebase/firestore";
 
 const config = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -13,9 +17,24 @@ const config = {
 
 export const firebaseConfigured = Boolean(config.apiKey && config.projectId);
 
+/**
+ * Local testing only: a build made with NEXT_PUBLIC_HOMEPREP_EMULATORS=1 talks
+ * to the Auth and Firestore emulators. Release builds don't set it, so the
+ * check is false at build time and production always uses the real services.
+ */
+const EMULATORS = process.env.NEXT_PUBLIC_HOMEPREP_EMULATORS === "1";
+
 // Initialized lazily so static prerendering never touches the SDK.
 function app(): FirebaseApp {
-  return getApps().length ? getApp() : initializeApp(config);
+  if (getApps().length) return getApp();
+  const created = initializeApp(config);
+  if (EMULATORS) {
+    connectAuthEmulator(getAuth(created), "http://127.0.0.1:9099", {
+      disableWarnings: true,
+    });
+    connectFirestoreEmulator(getFirestore(created), "127.0.0.1", 8085);
+  }
+  return created;
 }
 
 export const auth = (): Auth => getAuth(app());

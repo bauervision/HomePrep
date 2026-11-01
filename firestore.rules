@@ -1,9 +1,16 @@
 rules_version = '2';
 
-// HomePrep — household-scoped access.
-// A user can only read or write a household they are a member of. Membership is
-// created either by founding a new household or by redeeming a single-use,
-// expiring invite issued by an existing member.
+// HomePrep — invite-only, household-scoped access.
+//
+// Households are created only by redeeming an owner invitation issued by the
+// platform administrator. Family members join only by redeeming a member
+// invitation issued by an owner or co-owner. Every invitation is addressed to
+// one email and can be redeemed once, before it expires, only by a signed-in
+// user whose verified Google email matches it.
+//
+// Platform administration is a separate scope: it is granted by the
+// server-set custom claim `platformAdmin` (scripts/admin.mjs), never by a
+// document a client can write, and it gives no access to household content.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -11,20 +18,60 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function uid() {
+      return request.auth.uid;
+    }
+
+    // Set only through the Firebase Admin SDK by an authorized operator.
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.get('platformAdmin', false) == true
+        && request.auth.token.get('email_verified', false) == true;
+    }
+
+    // The caller's verified Google email, lower-cased; '' when unverified.
+    function verifiedEmail() {
+      return signedIn() && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.get('email', null) is string
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
     function householdPath(hid) {
       return /databases/$(database)/documents/households/$(hid);
     }
 
-    function memberPath(hid, uid) {
-      return /databases/$(database)/documents/households/$(hid)/members/$(uid);
+    function memberPath(hid, member) {
+      return /databases/$(database)/documents/households/$(hid)/members/$(member);
     }
 
-    function invitePath(code) {
-      return /databases/$(database)/documents/invites/$(code);
+    function invitationPath(id) {
+      return /databases/$(database)/documents/invitations/$(id);
+    }
+
+    function registrationPath(hid) {
+      return /databases/$(database)/documents/registrations/$(hid);
+    }
+
+    function auditPath(id) {
+      return /databases/$(database)/documents/auditLog/$(id);
     }
 
     function isMember(hid) {
-      return signedIn() && exists(memberPath(hid, request.auth.uid));
+      return signedIn() && exists(memberPath(hid, uid()));
+    }
+
+    function roleIn(hid) {
+      return get(memberPath(hid, uid())).data.role;
+    }
+
+    function isOwner(hid) {
+      return isMember(hid) && roleIn(hid) == 'owner';
+    }
+
+    // Owners and co-owners administer membership.
+    function isManager(hid) {
+      return isMember(hid) && roleIn(hid) in ['owner', 'co-owner'];
     }
 
     function str(v, min, max) {
@@ -35,106 +82,300 @@ service cloud.firestore {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(keys);
     }
 
-    // Pointer from a user to their household; used to locate it after sign-in.
-    match /users/{uid} {
-      allow read, delete: if signedIn() && request.auth.uid == uid;
-      allow create, update: if signedIn()
-        && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['householdId', 'updatedAt'])
-        && existsAfter(memberPath(request.resource.data.householdId, uid));
+    function changedOnly(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
+    function validEmail(e) {
+      return e is string && e.size() <= 254
+        && e.matches('^[a-z0-9._%+-]+@[a-z0-9.-]+[.][a-z]{2,}$');
+    }
+
+    function validProfile(d) {
+      return str(d.name, 1, 80)
+        && d.householdSize is int
+        && d.householdSize >= 1
+        && d.householdSize <= 30;
+    }
+
+    // Pointer from a user to the household they are using; used after sign-in.
+    match /users/{userId} {
+      allow read, delete: if signedIn() && uid() == userId;
+      allow create, update: if signedIn()
+        && uid() == userId
+        && request.resource.data.keys().hasOnly(['householdId', 'updatedAt'])
+        && existsAfter(memberPath(request.resource.data.householdId, userId));
+    }
+
+    // Retired bearer invite codes (before 0.7.0). They can no longer be
+    // created or redeemed; members may still see and clear old ones.
     match /invites/{code} {
-      // Redeeming requires knowing the exact (random) code; invites cannot be listed
-      // except by members of the issuing household.
-      allow get: if signedIn();
-      allow list: if isMember(resource.data.householdId);
+      allow get, list, delete: if isMember(resource.data.householdId);
+      allow create, update: if false;
+    }
 
-      allow create: if isMember(request.resource.data.householdId)
-        && request.resource.data.keys().hasOnly(
-          ['householdId', 'createdBy', 'createdByName', 'createdAt', 'expiresAt', 'usedBy', 'usedAt'])
-        && request.resource.data.createdBy == request.auth.uid
+    // ---------- Invitations ----------
+    //
+    // type 'owner'  — issued by the platform admin; redeeming it founds a new
+    //                 household (householdId is set on acceptance).
+    // type 'member' — issued by an owner or co-owner of householdId; role is
+    //                 'member', or 'co-owner' when issued by the owner.
+    // Expired is derived: 7 days after the server-set createdAt.
+    match /invitations/{id} {
+      function isInvitee(d) {
+        return verifiedEmail() != '' && verifiedEmail() == d.email;
+      }
+
+      function canManage(d) {
+        return (d.type == 'owner' && isAdmin())
+          || (d.type == 'member' && isManager(d.householdId));
+      }
+
+      function live(d) {
+        return d.status == 'pending'
+          && request.time < d.createdAt + duration.value(7, 'd');
+      }
+
+      allow get: if signedIn()
+        && (canManage(resource.data) || isInvitee(resource.data));
+      // Queries must filter by type (and householdId for member invitations).
+      allow list: if signedIn() && canManage(resource.data);
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'type', 'email', 'role', 'householdId', 'householdName',
+          'createdBy', 'createdByName', 'createdAt', 'status',
+          'acceptedBy', 'acceptedAt', 'revokedBy', 'revokedAt'])
+        && validEmail(request.resource.data.email)
+        && request.resource.data.createdBy == uid()
+        && str(request.resource.data.createdByName, 1, 120)
         && request.resource.data.createdAt == request.time
-        && request.resource.data.expiresAt is timestamp
-        && request.resource.data.expiresAt <= request.time + duration.value(7, 'd')
-        && request.resource.data.usedBy == null
-        && request.resource.data.usedAt == null
-        && code.matches('^[A-Z2-9]{5}(-[A-Z2-9]{5}){3}$');
+        && request.resource.data.status == 'pending'
+        && request.resource.data.acceptedBy == null
+        && request.resource.data.acceptedAt == null
+        && request.resource.data.revokedBy == null
+        && request.resource.data.revokedAt == null
+        && (
+          (request.resource.data.type == 'owner'
+            && isAdmin()
+            && request.resource.data.role == 'owner'
+            && request.resource.data.householdId == null
+            && request.resource.data.householdName == null
+            && existsAfter(auditPath(id + '_created')))
+          ||
+          (request.resource.data.type == 'member'
+            && request.resource.data.householdId is string
+            && isManager(request.resource.data.householdId)
+            && exists(registrationPath(request.resource.data.householdId))
+            && (request.resource.data.role == 'member'
+              || (request.resource.data.role == 'co-owner'
+                && isOwner(request.resource.data.householdId)))
+            && request.resource.data.householdName
+              == get(householdPath(request.resource.data.householdId)).data.name)
+        );
 
-      // Redemption: only flips usedBy/usedAt, once, before expiry, together with
-      // creating the redeemer's member document.
+      allow update: if signedIn() && live(resource.data) && (
+        // Revocation by whoever may manage it.
+        (canManage(resource.data)
+          && changedOnly(['status', 'revokedBy', 'revokedAt'])
+          && request.resource.data.status == 'revoked'
+          && request.resource.data.revokedBy == uid()
+          && request.resource.data.revokedAt == request.time
+          && (resource.data.type == 'member' || existsAfter(auditPath(id + '_revoked'))))
+        ||
+        // Acceptance by the invited, verified identity, together with the
+        // membership (and, for owners, the household) it grants.
+        (isInvitee(resource.data)
+          && request.resource.data.status == 'accepted'
+          && request.resource.data.acceptedBy == uid()
+          && request.resource.data.acceptedAt == request.time
+          && (
+            (resource.data.type == 'owner'
+              && changedOnly(['status', 'acceptedBy', 'acceptedAt', 'householdId'])
+              && request.resource.data.householdId is string
+              && !exists(householdPath(request.resource.data.householdId))
+              && getAfter(householdPath(request.resource.data.householdId)).data.invitationId == id
+              && existsAfter(auditPath(id + '_accepted')))
+            ||
+            (resource.data.type == 'member'
+              && changedOnly(['status', 'acceptedBy', 'acceptedAt'])
+              && !exists(memberPath(resource.data.householdId, uid()))
+              && getAfter(memberPath(resource.data.householdId, uid())).data.invitationId == id)
+          ))
+      );
+
+      // Invitation history is kept.
+      allow delete: if false;
+    }
+
+    // ---------- Platform registration records ----------
+    //
+    // The minimum the platform admin needs to manage registrations: no
+    // inventory, goals, notes or other household content.
+    match /registrations/{hid} {
+      allow get: if isAdmin() || isMember(hid);
+      allow list: if isAdmin();
+
+      // Written with the household it registers (owner invitation redemption).
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'name', 'ownerUid', 'ownerEmail', 'invitationId', 'memberCount',
+          'status', 'createdAt', 'updatedAt', 'lastChange'])
+        && request.resource.data.ownerUid == uid()
+        && request.resource.data.ownerEmail == verifiedEmail()
+        && request.resource.data.memberCount == 1
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.lastChange == uid()
+        && !exists(householdPath(hid))
+        && getAfter(householdPath(hid)).data.ownerUid == uid()
+        && getAfter(householdPath(hid)).data.invitationId == request.resource.data.invitationId
+        && getAfter(householdPath(hid)).data.name == request.resource.data.name;
+
+      // The member count moves only with a membership created or deleted in
+      // the same write; who may do that is decided by the member rules.
       allow update: if signedIn()
-        && resource.data.usedBy == null
-        && resource.data.expiresAt > request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'usedAt'])
-        && request.resource.data.usedBy == request.auth.uid
-        && request.resource.data.usedAt == request.time
-        && existsAfter(memberPath(resource.data.householdId, request.auth.uid));
+        && changedOnly(['memberCount', 'updatedAt', 'lastChange'])
+        && request.resource.data.updatedAt == request.time
+        && (
+          (request.resource.data.memberCount == resource.data.memberCount + 1
+            && request.resource.data.lastChange == uid()
+            && !exists(memberPath(hid, uid()))
+            && existsAfter(memberPath(hid, uid())))
+          ||
+          (request.resource.data.memberCount == resource.data.memberCount - 1
+            && request.resource.data.lastChange is string
+            && exists(memberPath(hid, request.resource.data.lastChange))
+            && !existsAfter(memberPath(hid, request.resource.data.lastChange)))
+        );
 
-      allow delete: if isMember(resource.data.householdId);
+      allow delete: if false;
+    }
+
+    // ---------- Registration activity (platform audit) ----------
+    //
+    // One entry per owner-invitation event, ID `${invitationId}_${action}`,
+    // written in the same batch as the event it records.
+    match /auditLog/{entryId} {
+      allow read: if isAdmin();
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'action', 'invitationId', 'email', 'householdId', 'actorUid', 'at'])
+        && request.resource.data.actorUid == uid()
+        && request.resource.data.at == request.time
+        && entryId == request.resource.data.invitationId + '_' + request.resource.data.action
+        && getAfter(invitationPath(request.resource.data.invitationId)).data.type == 'owner'
+        && request.resource.data.email
+          == getAfter(invitationPath(request.resource.data.invitationId)).data.email
+        && (
+          (request.resource.data.action == 'created'
+            && isAdmin()
+            && !exists(invitationPath(request.resource.data.invitationId))
+            && request.resource.data.householdId == null)
+          ||
+          (request.resource.data.action == 'revoked'
+            && isAdmin()
+            && getAfter(invitationPath(request.resource.data.invitationId)).data.revokedBy == uid()
+            && request.resource.data.householdId == null)
+          ||
+          (request.resource.data.action == 'accepted'
+            && getAfter(invitationPath(request.resource.data.invitationId)).data.acceptedBy == uid()
+            && request.resource.data.householdId
+              == getAfter(invitationPath(request.resource.data.invitationId)).data.householdId)
+        );
+
+      allow update, delete: if false;
     }
 
     match /households/{hid} {
+      // Platform admin status grants nothing here: membership only.
       allow read: if isMember(hid);
 
-      // Founding: the creator must create their own owner membership in the same batch.
+      // Founded only by redeeming an owner invitation, with the founder's
+      // owner membership and the registration record in the same batch.
       allow create: if signedIn()
-        && request.resource.data.ownerUid == request.auth.uid
-        && str(request.resource.data.name, 1, 80)
-        && request.resource.data.householdSize is int
-        && request.resource.data.householdSize >= 1
-        && request.resource.data.householdSize <= 30
-        && existsAfter(memberPath(hid, request.auth.uid));
+        && request.resource.data.ownerUid == uid()
+        && request.resource.data.invitationId is string
+        && get(invitationPath(request.resource.data.invitationId)).data.type == 'owner'
+        && get(invitationPath(request.resource.data.invitationId)).data.status == 'pending'
+        && getAfter(invitationPath(request.resource.data.invitationId)).data.status == 'accepted'
+        && getAfter(invitationPath(request.resource.data.invitationId)).data.acceptedBy == uid()
+        && getAfter(invitationPath(request.resource.data.invitationId)).data.householdId == hid
+        && validProfile(request.resource.data)
+        && existsAfter(memberPath(hid, uid()))
+        && existsAfter(registrationPath(hid));
 
       allow update: if isMember(hid)
-        && unchanged(['ownerUid', 'createdAt'])
-        && str(request.resource.data.name, 1, 80)
-        && request.resource.data.householdSize is int
-        && request.resource.data.householdSize >= 1
-        && request.resource.data.householdSize <= 30;
+        && unchanged(['ownerUid', 'createdAt', 'invitationId'])
+        && validProfile(request.resource.data);
 
       allow delete: if false;
 
-      function inviteRedeemable(code) {
-        let before = get(invitePath(code)).data;
-        let after = getAfter(invitePath(code)).data;
-        return before.householdId == hid
-          && before.usedBy == null
-          && before.expiresAt > request.time
-          && after.usedBy == request.auth.uid;
-      }
+      // Membership. Roles: 'owner' (the founder, ownerUid; exactly one, never
+      // removed or demoted), 'co-owner' and 'member'.
+      match /members/{memberId} {
+        function countMoves(delta) {
+          return getAfter(registrationPath(hid)).data.memberCount
+            == get(registrationPath(hid)).data.memberCount + delta;
+        }
 
-      match /members/{uid} {
         allow read: if isMember(hid);
         // A user may always check their own membership (absent doc => not a member).
-        allow get: if signedIn() && request.auth.uid == uid;
+        allow get: if signedIn() && uid() == memberId;
 
         allow create: if signedIn()
-          && request.auth.uid == uid
-          && request.resource.data.uid == uid
+          && uid() == memberId
+          && request.resource.data.uid == memberId
           && request.resource.data.keys().hasOnly(
-            ['uid', 'displayName', 'email', 'photoURL', 'role', 'joinedAt', 'inviteCode'])
+            ['uid', 'displayName', 'email', 'photoURL', 'role', 'joinedAt', 'invitationId'])
           && request.resource.data.joinedAt == request.time
+          && request.resource.data.invitationId is string
           && (
-            // Founder of a brand-new household.
+            // Founder of a household created from an owner invitation.
             (request.resource.data.role == 'owner'
               && !exists(householdPath(hid))
-              && getAfter(householdPath(hid)).data.ownerUid == uid)
+              && getAfter(householdPath(hid)).data.ownerUid == memberId
+              && getAfter(householdPath(hid)).data.invitationId
+                == request.resource.data.invitationId)
             ||
-            // Redeeming a valid invite for this household.
-            (request.resource.data.role == 'member'
-              && request.resource.data.inviteCode is string
-              && inviteRedeemable(request.resource.data.inviteCode))
+            // Redeeming a member invitation for this household, in its role.
+            // The invitation must be pending before this write: an accepted
+            // one can't recreate a membership after removal.
+            (request.resource.data.role in ['member', 'co-owner']
+              && get(invitationPath(request.resource.data.invitationId)).data.type == 'member'
+              && get(invitationPath(request.resource.data.invitationId)).data.status == 'pending'
+              && get(invitationPath(request.resource.data.invitationId)).data.householdId == hid
+              && get(invitationPath(request.resource.data.invitationId)).data.role
+                == request.resource.data.role
+              && getAfter(invitationPath(request.resource.data.invitationId)).data.status == 'accepted'
+              && getAfter(invitationPath(request.resource.data.invitationId)).data.acceptedBy == memberId
+              && countMoves(1))
           );
 
-        // Members may refresh their own profile fields only.
-        allow update: if signedIn()
-          && request.auth.uid == uid
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['displayName', 'email', 'photoURL']);
+        allow update: if signedIn() && (
+          // Members may refresh their own profile fields.
+          (uid() == memberId
+            && changedOnly(['displayName', 'email', 'photoURL']))
+          ||
+          // The owner promotes members to co-owner and back. The owner's own
+          // role can't change, so a household always keeps its owner.
+          (isOwner(hid)
+            && memberId != uid()
+            && changedOnly(['role'])
+            && resource.data.role in ['member', 'co-owner']
+            && request.resource.data.role in ['member', 'co-owner'])
+        );
 
-        // A non-owner may leave.
-        allow delete: if signedIn() && request.auth.uid == uid && resource.data.role != 'owner';
+        // Leaving, or removal: the owner removes anyone else; a co-owner
+        // removes members. The owner can't be removed.
+        allow delete: if signedIn()
+          && resource.data.role != 'owner'
+          && (uid() == memberId
+            || isOwner(hid)
+            || (isManager(hid) && resource.data.role == 'member'))
+          && (!exists(registrationPath(hid)) || countMoves(-1));
       }
 
       match /inventory/{itemId} {

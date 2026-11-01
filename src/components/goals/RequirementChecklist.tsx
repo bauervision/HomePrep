@@ -24,7 +24,7 @@ import {
   Select,
   Textarea,
 } from "@/components/ui";
-import { EVIDENCE_LABEL, SOURCES } from "@/lib/baseline";
+import { EVIDENCE_LABEL, SOURCES, type Condition } from "@/lib/baseline";
 import {
   confirm as confirmChange,
   createCustom,
@@ -66,11 +66,13 @@ const STATUS_TONE: Record<
 > = {
   "not-started": "neutral",
   "in-progress": "warn",
+  linked: "neutral",
+  "needs-evidence": "warn",
   confirmed: "info",
   evidence: "good",
   met: "good",
   "not-applicable": "neutral",
-  "needs-review": "warn",
+  attention: "warn",
 };
 
 const sectionLabel =
@@ -394,7 +396,7 @@ function RequirementRow({
                   Marked not applicable
                   {r.record!.notApplicable!.reason &&
                     `: “${r.record!.notApplicable!.reason}”`}
-                  {r.status === "needs-review" &&
+                  {r.status === "attention" &&
                     ". This is core guidance, so it still counts toward the goal."}
                 </p>
               )}
@@ -412,6 +414,7 @@ function RequirementRow({
               r={r}
               items={items}
               today={today}
+              condition={linkable.kind === "inventory" ? linkable : null}
               category={
                 linkable.kind === "inventory"
                   ? (linkable.category ?? e.category)
@@ -556,19 +559,33 @@ function Sources({ r }: { r: EvaluatedRequirement }) {
   );
 }
 
+/**
+ * How much a linked item says about this requirement. A link is evidence the
+ * household selected, not proof that the requirement is met.
+ */
+function linkGuidance(c: Extract<Condition, { kind: "inventory" }> | null) {
+  if (!c || c.sufficient) return null;
+  if (c.covers)
+    return `Covers: ${c.covers.join(", ")}. A linked item shows only what it is, so confirm once you have every one of these.`;
+  return "A linked item is evidence you selected, not proof. Confirm when what you have covers this requirement.";
+}
+
 function LinkedItems({
   r,
   items,
   today,
+  condition,
   category,
   onAddItem,
 }: {
   r: EvaluatedRequirement;
   items: InventoryItem[];
   today: string;
+  condition: Extract<Condition, { kind: "inventory" }> | null;
   category: Category | undefined;
   onAddItem: (category: Category) => void;
 }) {
+  const guidance = linkGuidance(condition);
   const { busy, error, run } = useChange();
   const linkedIds = r.record?.inventoryIds ?? [];
   const candidates = usable(items, today).filter(
@@ -579,6 +596,11 @@ function LinkedItems({
 
   return (
     <div className="space-y-1">
+      {guidance && (
+        <p className="text-[11px] text-slate" data-testid="link-guidance">
+          {guidance}
+        </p>
+      )}
       {(r.linked.length > 0 || missing.length > 0) && (
         <ul className="space-y-0.5">
           {r.linked.map((i) => (

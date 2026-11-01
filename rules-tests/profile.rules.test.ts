@@ -105,7 +105,9 @@ describe("household profile", () => {
     );
   });
 
-  it("lets a founder create a household with a profile", async () => {
+  // Since 0.7.0 households are founded only from an owner invitation
+  // (registration.rules.test.ts); a bare founding batch is denied.
+  it("denies founding a household without an invitation", async () => {
     const d = db("carol");
     const batch = writeBatch(d);
     batch.set(doc(d, "households/h3"), {
@@ -122,7 +124,7 @@ describe("household profile", () => {
       role: "owner",
       joinedAt: serverTimestamp(),
     });
-    await assertSucceeds(batch.commit());
+    await assertFails(batch.commit());
   });
 });
 

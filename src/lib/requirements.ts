@@ -1,4 +1,9 @@
-import type { MilestoneKey, RequirementState, TargetOverrides } from "./types";
+import type {
+  BaselineReviews,
+  MilestoneKey,
+  RequirementState,
+  TargetOverrides,
+} from "./types";
 
 /*
  * Preparedness requirements
@@ -125,6 +130,8 @@ export interface Plan {
   overrides?: TargetOverrides;
   /** Household requirement records (lib/checklist.ts). */
   requirements?: RequirementState;
+  /** Baseline versions the household acknowledged, per goal. */
+  reviews?: BaselineReviews;
 }
 
 /** A bare number is treated as a member count with no custom targets. */

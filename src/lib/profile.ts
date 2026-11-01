@@ -139,5 +139,6 @@ export function householdPlan(h: Household): Plan {
     memberCount: resolveProfile(h).memberCount,
     overrides: h.targetOverrides,
     requirements: h.requirementState,
+    reviews: h.baselineReviews,
   };
 }

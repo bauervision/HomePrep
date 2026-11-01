@@ -37,13 +37,19 @@ import {
   Select,
 } from "@/components/ui";
 import { GOAL_PURPOSE } from "@/lib/baseline";
-import { planAction } from "@/lib/checklist";
-import { relatedTasks, saveTargetOverride } from "@/lib/goals";
+import { planAction, STATUS_LABEL } from "@/lib/checklist";
+import { displayNameOf } from "@/lib/household";
+import {
+  acknowledgeBaseline,
+  relatedTasks,
+  saveTargetOverride,
+} from "@/lib/goals";
 import { useObjective } from "@/lib/objective";
 import { describeMembers, householdPlan, resolveProfile } from "@/lib/profile";
 import { describeQuantity } from "@/lib/quantities";
 import {
   goalCategory,
+  isExpired,
   isMilestoneKey,
   measureInventory,
   milestoneByKey,
@@ -309,6 +315,173 @@ function GoalStatusIcon({ essential: e }: { essential: Essential }) {
 const sectionLabel =
   "mb-1.5 text-[11px] font-semibold tracking-[0.14em] text-sage uppercase";
 
+/**
+ * "Needs review": the goal's recommendations changed since the household last
+ * relied on them. Explains what changed and what remains, and lets the
+ * household acknowledge the new baseline. Acknowledging changes no
+ * requirement: incomplete ones stay incomplete.
+ */
+function BaselineReviewPanel({
+  essential: e,
+  items,
+  today,
+  open,
+  onOpen,
+  onClose,
+}: {
+  essential: Essential;
+  items: InventoryItem[];
+  today: string;
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  const { household, user } = useHousehold();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const review = e.review!;
+  const counted = e.checklist.requirements.filter((r) => r.counted);
+  const remaining = counted.filter((r) => !r.satisfied);
+  const contributing = counted.filter(
+    (r) => r.satisfied || r.linked.length > 0 || r.tasks.length > 0,
+  );
+  const category = goalCategory(e);
+  const recorded = category
+    ? items.filter(
+        (i) =>
+          i.category === category && i.quantity > 0 && !isExpired(i, today),
+      )
+    : [];
+  const next = remaining[0];
+
+  async function acknowledge() {
+    setBusy(true);
+    setError(null);
+    try {
+      await acknowledgeBaseline(
+        household.id,
+        review.key,
+        review.version,
+        displayNameOf(user),
+      );
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section
+      id="baseline-review"
+      tabIndex={-1}
+      aria-labelledby="baseline-review-title"
+      data-testid="baseline-review"
+      className="space-y-2 rounded-md border border-amber/30 bg-amber/6 px-3 py-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-amber"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 id="baseline-review-title" className="font-medium text-amber">
+          Recommendations updated
+        </h3>
+        {!open && (
+          <Button size="sm" onClick={onOpen} className="min-h-9 sm:min-h-0">
+            Review Changes
+          </Button>
+        )}
+      </div>
+      <p className="text-ivory-dim">{review.why}</p>
+      {open && (
+        <div className="space-y-3 pt-1">
+          {review.changes.length > 0 && (
+            <div>
+              <h4 className={sectionLabel}>What changed</h4>
+              <ul className="space-y-1">
+                {review.changes.map((c) => (
+                  <li key={c.id}>
+                    <span className="text-ivory">{c.title}</span>{" "}
+                    <span className="text-slate">
+                      {c.kind === "added" ? "· added" : "· changed"}
+                    </span>
+                    {c.note && (
+                      <span className="block text-sage">{c.note}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div>
+            <h4 className={sectionLabel}>Still to do ({remaining.length})</h4>
+            {remaining.length === 0 ? (
+              <p className="text-sage">Nothing — every requirement is done.</p>
+            ) : (
+              <ul className="space-y-1" data-testid="review-remaining">
+                {remaining.map((r) => (
+                  <li key={r.id}>
+                    <span className="text-ivory">{r.def.title}</span>{" "}
+                    <span className="text-slate">
+                      · {STATUS_LABEL[r.status]}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {(contributing.length > 0 || recorded.length > 0) && (
+            <div>
+              <h4 className={sectionLabel}>Already contributing</h4>
+              <ul className="space-y-1">
+                {contributing.map((r) => (
+                  <li key={r.id}>
+                    <span className="text-ivory">{r.def.title}</span>
+                    <span className="text-sage"> — {r.reason}</span>
+                  </li>
+                ))}
+              </ul>
+              {recorded.length > 0 && (
+                <p className="mt-1 text-sage">
+                  Recorded {category} items:{" "}
+                  {recorded
+                    .map((i) => `${i.name} (${describeQuantity(i)})`)
+                    .join(", ")}
+                  . Link an item to the requirement it supports; items aren’t
+                  counted by category alone.
+                </p>
+              )}
+            </div>
+          )}
+          {next && (
+            <p className="text-sage">
+              <span className="text-slate">Next: </span>
+              {next.def.title} — {next.def.action}
+            </p>
+          )}
+          <p className="text-slate">
+            Acknowledging records that your household has seen these changes. It
+            doesn’t mark anything complete; open requirements stay open.
+          </p>
+          <ErrorText>{error}</ErrorText>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="emerald"
+              size="sm"
+              icon={Check}
+              loading={busy}
+              onClick={acknowledge}
+              className="min-h-10 sm:min-h-0"
+            >
+              Acknowledge changes
+            </Button>
+            <Button size="sm" onClick={onClose} className="min-h-10 sm:min-h-0">
+              Not now
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 const prefersReducedMotion = () =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -340,6 +513,7 @@ function GoalDetail({
     () => new Set(quantityId ? [quantityId] : []),
   );
   const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
+  const [reviewing, setReviewing] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [adding, setAdding] = useState<Category | null>(null);
   const editingTask = tasks.find((t) => t.id === taskId) ?? null;
@@ -368,7 +542,10 @@ function GoalDetail({
   }, [focusTarget]);
 
   function runPlanAction() {
-    if (action.targetId) {
+    if (action.kind === "review-changes") {
+      setReviewing(true);
+      setFocusTarget({ id: "baseline-review" });
+    } else if (action.targetId) {
       const id = action.targetId;
       setOpen((s) => new Set(s).add(id));
       setFocusTarget({ id: `req-toggle-${id}` });
@@ -403,13 +580,15 @@ function GoalDetail({
             <p className="text-sm text-ivory-dim">{GOAL_PURPOSE[e.key]}</p>
           )}
         </div>
-        {e.reviewNote && (
-          <p
-            role="note"
-            className="rounded-md border border-amber/30 bg-amber/8 px-3 py-2 text-xs text-amber"
-          >
-            Needs review: {e.reviewNote}
-          </p>
+        {e.review && (
+          <BaselineReviewPanel
+            essential={e}
+            items={items}
+            today={today}
+            open={reviewing}
+            onOpen={() => setReviewing(true)}
+            onClose={() => setReviewing(false)}
+          />
         )}
 
         {/* B. Progress, with D. the primary action beside it */}

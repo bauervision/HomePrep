@@ -38,6 +38,11 @@ export interface SessionContextValue {
   state: SessionState;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * The signed-in user holds the platform-admin custom claim. Only decides
+   * what is shown: every privileged operation is enforced by the rules.
+   */
+  admin?: boolean;
 }
 
 /** Exported for the development-only design preview (fixture sessions). */
@@ -75,6 +80,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
   const [error, setError] = useState<Loaded<string> | null>(null);
   const [seedError, setSeedError] = useState<string | null>(null);
+  const [adminFor, setAdminFor] = useState<string | null>(null);
   const seeded = useRef<string | null>(null);
 
   useEffect(() => {
@@ -87,6 +93,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const uid = user?.uid ?? "";
+
+  // Platform admin: the server-set custom claim. The token is refreshed once
+  // per sign-in so a newly granted (or revoked) claim applies without waiting
+  // for the hourly refresh.
+  useEffect(() => {
+    if (!user) return;
+    let live = true;
+    user
+      .getIdTokenResult(true)
+      .then((t) => {
+        if (live && t.claims.platformAdmin === true && user.emailVerified)
+          setAdminFor(user.uid);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [user]);
 
   // users/{uid} → householdId. Only server-confirmed values are used: right after
   // creating or joining, the local (pending) write would otherwise trigger reads
@@ -165,7 +189,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       status: "noHousehold",
       user,
       notice:
-        "You are no longer a member of your previous household. Create a new one or join with an invite.",
+        "You are no longer a member of your previous household. Open an invitation link to join a household.",
     };
   else if (home === undefined) state = { status: "loading" };
   else if (home === null)
@@ -179,6 +203,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const value: SessionContextValue = {
     state,
+    admin: !!uid && adminFor === uid,
     signIn: async () => {
       await signInWithPopup(auth(), new GoogleAuthProvider());
     },

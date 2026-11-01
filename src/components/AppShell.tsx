@@ -1,19 +1,26 @@
 "use client";
 
-import { House, KeyRound, LogIn, Plus, UserRound, Users } from "lucide-react";
+import { House, Link2, LogIn, MailOpen, UserRound } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { createHousehold, JoinError, joinWithInvite } from "@/lib/household";
-import { MAX_MEMBERS } from "@/lib/profile";
+import { invitationPath, parseInvitationRef } from "@/lib/household";
 import { Logo, LogoMark } from "./brand/Logo";
 import { VersionLabel } from "./brand/VersionLabel";
 import { WildernessBackdrop } from "./brand/WildernessBackdrop";
 import { MobileNav } from "./MobileNav";
 import { QuickNote } from "./notes/QuickNote";
-import { isActive, NAV } from "./nav";
+import { isActive, navFor } from "./nav";
 import { useSession } from "./SessionProvider";
-import { Button, CardTitle, cx, ErrorText, Field, Input } from "./ui";
+import {
+  Button,
+  CardTitle,
+  cx,
+  ErrorText,
+  Field,
+  Input,
+  linkClass,
+} from "./ui";
 
 /** Full-bleed cinematic stage for sign-in, onboarding and status screens. */
 function Stage({ children }: { children: ReactNode }) {
@@ -59,7 +66,7 @@ function AccountButton({
   );
 }
 
-export function SignIn() {
+export function SignIn({ notice }: { notice?: string } = {}) {
   const { signIn } = useSession();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -78,7 +85,8 @@ export function SignIn() {
         </p>
         <VersionLabel className="mt-2 block" />
         <p className="mt-6 text-sm text-ivory-dim">
-          Private household preparedness workspace. Sign in to continue.
+          {notice ??
+            "Private household preparedness workspace. Sign in to continue."}
         </p>
         <Button
           variant="emerald"
@@ -104,53 +112,27 @@ export function SignIn() {
   );
 }
 
+/**
+ * Signed in, but not in a household. HomePrep is invite-only: households are
+ * founded from an administrator's owner invitation and joined from a
+ * household's member invitation, both opened by link.
+ */
 export function Onboarding() {
-  const { state, signOut } = useSession();
-  const user = state.status === "noHousehold" ? state.user : null;
-  const [name, setName] = useState("Our Household");
-  // Explicit, editable starting point; the household confirms its real size.
-  const [adults, setAdults] = useState(1);
-  const [children, setChildren] = useState(0);
-  const [code, setCode] = useState(() =>
-    typeof window === "undefined"
-      ? ""
-      : (new URLSearchParams(window.location.search).get("code") ?? ""),
-  );
-  const [busy, setBusy] = useState<"create" | "join" | null>(null);
+  const { state, signOut, admin } = useSession();
+  const router = useRouter();
+  const [link, setLink] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const user = state.status === "noHousehold" ? state.user : null;
   if (!user) return null;
 
-  async function onCreate(e: FormEvent) {
+  function open(e: FormEvent) {
     e.preventDefault();
-    setBusy("create");
-    setError(null);
-    try {
-      await createHousehold(user!, name.trim() || "Our Household", {
-        adults,
-        children,
-        pets: { dogs: 0, cats: 0, other: 0 },
-        considerations: [],
-      });
-    } catch (err) {
-      setError((err as Error).message);
-      setBusy(null);
+    const id = parseInvitationRef(link);
+    if (!id) {
+      setError("Paste the whole invitation link you were sent.");
+      return;
     }
-  }
-
-  async function onJoin(e: FormEvent) {
-    e.preventDefault();
-    setBusy("join");
-    setError(null);
-    try {
-      await joinWithInvite(user!, code);
-    } catch (err) {
-      setError(
-        err instanceof JoinError
-          ? err.message
-          : `Could not join: ${(err as Error).message}`,
-      );
-      setBusy(null);
-    }
+    router.push(invitationPath(id));
   }
 
   return (
@@ -168,24 +150,25 @@ export function Onboarding() {
         )}
 
         <div className="mt-6 grid gap-5 sm:mt-8 md:grid-cols-2 md:gap-6">
-          <form onSubmit={onJoin} className="surface flex flex-col p-6 sm:p-8">
-            <CardTitle icon={Users} large>
-              Join your household
+          <form onSubmit={open} className="surface flex flex-col p-6 sm:p-8">
+            <CardTitle icon={MailOpen} large>
+              Open your invitation
             </CardTitle>
             <p className="mt-5 text-[15px] leading-relaxed text-ivory-dim sm:text-base">
-              Enter the invite code a household member shared with you. Codes
-              are single-use and expire after 7 days.
+              HomePrep is invite-only. Open the invitation link a household
+              owner or the HomePrep administrator sent you, signed in as{" "}
+              <span className="text-ivory">{user.email}</span>.
             </p>
             <div className="mt-auto pt-5">
-              <Field label="Invite code">
+              <Field label="Invitation link">
                 <Input
-                  icon={KeyRound}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="XXXXX-XXXXX-XXXXX-XXXXX"
+                  icon={Link2}
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                  placeholder="https://…/invite/?id=…"
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-12 font-mono tracking-wider uppercase"
+                  className="h-12"
                 />
               </Field>
               <Button
@@ -193,102 +176,35 @@ export function Onboarding() {
                 variant="emerald"
                 size="lg"
                 icon={LogIn}
-                loading={busy === "join"}
-                disabled={!!busy || !code.trim()}
+                disabled={!link.trim()}
                 className="mt-4 w-full justify-start"
               >
-                {busy === "join" ? "Joining…" : "Join household"}
+                Open invitation
               </Button>
+              <div className="mt-3">
+                <ErrorText>{error}</ErrorText>
+              </div>
             </div>
           </form>
 
-          <form
-            onSubmit={onCreate}
-            className="surface flex flex-col p-6 sm:p-8"
-          >
+          <div className="surface flex flex-col p-6 sm:p-8">
             <CardTitle icon={House} large>
-              Start a new household
+              No invitation yet?
             </CardTitle>
             <p className="mt-5 text-[15px] leading-relaxed text-ivory-dim sm:text-base">
-              Create a private workspace, then invite the other adults in your
-              home.
+              To join your family’s household, ask its owner to invite this
+              Google account from their Household page. New households are
+              approved by the HomePrep administrator during the private beta.
             </p>
-            <div className="mt-auto pt-5">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_5.5rem_5.5rem]">
-                <Field
-                  label="Household name"
-                  className="col-span-2 sm:col-span-1"
-                >
-                  <Input
-                    icon={House}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    maxLength={80}
-                    className="h-12"
-                  />
-                </Field>
-                <Field label="Adults">
-                  <Input
-                    icon={Users}
-                    type="number"
-                    min={1}
-                    max={MAX_MEMBERS}
-                    value={adults}
-                    onChange={(e) =>
-                      setAdults(
-                        Math.max(
-                          1,
-                          Math.min(
-                            MAX_MEMBERS - children,
-                            Math.round(Number(e.target.value)) || 1,
-                          ),
-                        ),
-                      )
-                    }
-                    className="h-12"
-                  />
-                </Field>
-                <Field label="Children">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={MAX_MEMBERS - 1}
-                    value={children}
-                    onChange={(e) =>
-                      setChildren(
-                        Math.max(
-                          0,
-                          Math.min(
-                            MAX_MEMBERS - adults,
-                            Math.round(Number(e.target.value)) || 0,
-                          ),
-                        ),
-                      )
-                    }
-                    className="h-12"
-                  />
-                </Field>
-              </div>
-              <p className="mt-2 text-[11px] text-slate">
-                Water and food targets scale with everyone in the household. You
-                can change this later.
-              </p>
-              <Button
-                type="submit"
-                variant="copper"
-                size="lg"
-                icon={Plus}
-                loading={busy === "create"}
-                disabled={!!busy}
-                className="mt-4 w-full sm:w-auto sm:min-w-[13rem]"
+            {admin && (
+              <Link
+                href="/admin/"
+                className={cx("mt-auto pt-5 text-sm", linkClass)}
               >
-                {busy === "create" ? "Creating…" : "Create household"}
-              </Button>
-            </div>
-          </form>
-        </div>
-        <div className="mt-4">
-          <ErrorText>{error}</ErrorText>
+                Open Admin
+              </Link>
+            )}
+          </div>
         </div>
       </div>
     </Stage>
@@ -296,9 +212,10 @@ export function Onboarding() {
 }
 
 export function TopBar() {
-  const { state, signOut } = useSession();
+  const { state, signOut, admin } = useSession();
   const pathname = usePathname();
   if (state.status !== "ready") return null;
+  const items = navFor(!!admin);
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-[#040b11]/80 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:gap-5 sm:px-5">
@@ -313,7 +230,7 @@ export function TopBar() {
           aria-label="Main"
           className="hidden min-w-0 flex-1 gap-0.5 lg:flex"
         >
-          {NAV.map(({ href, label, icon: Icon }) => {
+          {items.map(({ href, label, icon: Icon }) => {
             const active = isActive(pathname, href);
             return (
               <Link
@@ -356,6 +273,7 @@ export function TopBar() {
           <MobileNav
             pathname={pathname}
             onSignOut={signOut}
+            items={items}
             account={[state.household.name, state.user.email]
               .filter(Boolean)
               .join(" · ")}
@@ -390,12 +308,53 @@ const DEV_PREVIEW =
   process.env.NODE_ENV === "development" ||
   process.env.NEXT_PUBLIC_HOMEPREP_PREVIEW === "1";
 
+/** Signed in, outside a household: a plain frame with a way back out. */
+function AccountFrame({ children }: { children: ReactNode }) {
+  const { state, signOut } = useSession();
+  const email =
+    state.status === "noHousehold" || state.status === "error"
+      ? state.user.email
+      : null;
+  return (
+    <Stage>
+      <div className="mx-auto w-full max-w-5xl">
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+          <Link href="/" aria-label="HomePrep" className="rounded-md">
+            <Logo size="sm" version />
+          </Link>
+          <AccountButton email={email} onClick={signOut} />
+        </header>
+        {children}
+      </div>
+    </Stage>
+  );
+}
+
+/** Routes that work with or without a household (once signed in). */
+const ACCOUNT_ROUTES = ["/invite", "/admin"];
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { state, signOut } = useSession();
   const pathname = usePathname();
 
   // Development-only design preview renders its own frames with fixture data.
   if (DEV_PREVIEW && pathname.startsWith("/preview")) return <>{children}</>;
+
+  // Invitations and Admin don't need a household: someone accepting an owner
+  // invitation has none yet.
+  const accountRoute = ACCOUNT_ROUTES.some((r) => pathname.startsWith(r));
+  if (accountRoute && state.status === "signedOut")
+    return (
+      <SignIn
+        notice={
+          pathname.startsWith("/invite")
+            ? "Sign in with the Google account your invitation was sent to."
+            : undefined
+        }
+      />
+    );
+  if (accountRoute && state.status === "noHousehold")
+    return <AccountFrame>{children}</AccountFrame>;
 
   switch (state.status) {
     case "unconfigured":

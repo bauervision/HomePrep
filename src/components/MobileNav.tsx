@@ -11,7 +11,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { currentNav, isActive, NAV } from "./nav";
+import { currentNav, isActive, NAV, type NavItem } from "./nav";
 import { cx } from "./ui";
 
 /**
@@ -39,10 +39,12 @@ export function MobileNav({
   pathname,
   onSignOut,
   account,
+  items = NAV,
 }: {
   pathname: string;
   onSignOut: () => void;
   account?: string;
+  items?: NavItem[];
 }) {
   // Tied to the pathname it was opened on, so any navigation closes it.
   const [openFor, setOpenFor] = useState<string | null>(null);
@@ -58,7 +60,7 @@ export function MobileNav({
     () => true,
     () => false,
   );
-  const current = currentNav(pathname);
+  const current = currentNav(pathname, items);
 
   useEffect(() => {
     if (!open) return;
@@ -180,7 +182,7 @@ export function MobileNav({
         >
           <nav aria-label="Main">
             <ul>
-              {NAV.map(({ href, label, icon: Icon }) => {
+              {items.map(({ href, label, icon: Icon }) => {
                 const active = isActive(pathname, href);
                 return (
                   <li key={href}>

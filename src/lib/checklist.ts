@@ -19,8 +19,16 @@ import type {
  * ----------------------
  * Deterministic evaluation of each requirement from recorded data only:
  *   met        — a quantitative target is reached (water, food)
- *   evidence   — a selected, in-stock inventory record or a completed task
+ *   evidence   — a completed task, or a selected in-stock record of the one
+ *                kind of item the requirement names
  *   confirmed  — the household says so (reported, not verified)
+ * Not yet satisfied:
+ *   linked          — an item is linked, but it doesn't establish the
+ *                     requirement on its own; the household confirms it
+ *   needs-evidence  — linked items don't show every component of a combined
+ *                     requirement (e.g. toilet paper for "garbage bags and
+ *                     plastic ties"); the household confirms all of them
+ *   attention       — selected evidence is used up, expired or deleted
  * Applicability is separate from completion: only conditional or custom
  * requirements leave the count when marked not applicable. Dismissing core
  * guidance never improves a goal.
@@ -32,8 +40,10 @@ export type RequirementStatus =
   | "confirmed"
   | "evidence"
   | "met"
+  | "linked"
+  | "needs-evidence"
   | "not-applicable"
-  | "needs-review";
+  | "attention";
 
 export const STATUS_LABEL: Record<RequirementStatus, string> = {
   "not-started": "Not started",
@@ -41,8 +51,10 @@ export const STATUS_LABEL: Record<RequirementStatus, string> = {
   confirmed: "Household confirmed",
   evidence: "Evidence supported",
   met: "Met",
+  linked: "Linked inventory",
+  "needs-evidence": "Needs additional evidence",
   "not-applicable": "Not applicable",
-  "needs-review": "Needs review",
+  attention: "Needs attention",
 };
 
 const SATISFIED: ReadonlySet<RequirementStatus> = new Set([
@@ -51,6 +63,10 @@ const SATISFIED: ReadonlySet<RequirementStatus> = new Set([
   "confirmed",
 ]);
 export const isSatisfied = (s: RequirementStatus) => SATISFIED.has(s);
+
+/** Work has started, but the requirement isn't satisfied yet. */
+export const isUnderway = (s: RequirementStatus) =>
+  s === "in-progress" || s === "linked" || s === "needs-evidence";
 
 export const MAX_TITLE = 120;
 export const MAX_EXPLANATION = 600;
@@ -92,10 +108,21 @@ export interface EvaluatedRequirement {
 }
 
 type ConditionResult = {
-  rank: "met" | "evidence" | "confirmed" | "partial" | "stale" | "none";
+  rank:
+    "met" | "evidence" | "confirmed" | "linked" | "partial" | "stale" | "none";
   reason: string;
+  /** For "linked": some listed components are not shown by the link. */
+  incomplete?: boolean;
 };
-const RANK = ["none", "stale", "partial", "confirmed", "evidence", "met"];
+const RANK = [
+  "none",
+  "stale",
+  "partial",
+  "linked",
+  "confirmed",
+  "evidence",
+  "met",
+];
 const rankOf = (r: ConditionResult) => RANK.indexOf(r.rank);
 const satisfiedRank = (r: ConditionResult) =>
   r.rank === "met" || r.rank === "evidence" || r.rank === "confirmed";
@@ -131,11 +158,23 @@ function evaluateCondition(
       if (ids.length === 0) return { rank: "none", reason: "No item linked" };
       const linked = ctx.items.filter((i) => ids.includes(i.id));
       const ok = linked.filter((i) => inStock(i, ctx.today));
-      if (ok.length > 0)
+      if (ok.length > 0) {
+        const names = ok.map((i) => i.name).join(", ");
+        // The item category is never taken as proof of what an item is.
+        if (c.sufficient) return { rank: "evidence", reason: names };
+        if (c.covers)
+          return {
+            rank: "linked",
+            incomplete: true,
+            reason: `${names} linked. Confirm you also have: ${c.covers
+              .map((x, i) => (i === 0 ? x : x.toLowerCase()))
+              .join(", ")}`,
+          };
         return {
-          rank: "evidence",
-          reason: ok.map((i) => i.name).join(", "),
+          rank: "linked",
+          reason: `${names} linked. Confirm it covers this requirement`,
         };
+      }
       return {
         rank: "stale",
         reason:
@@ -186,7 +225,13 @@ function customDef(id: string, r: RequirementRecord): RequirementDef {
       ? { mode: "all", conditions: task }
       : {
           mode: "any",
-          conditions: [{ kind: "inventory" }, ...task, { kind: "attest" }],
+          // The household defined this requirement, so an item it selects
+          // for it is its evidence.
+          conditions: [
+            { kind: "inventory", sufficient: true },
+            ...task,
+            { kind: "attest" },
+          ],
         },
     sources: [],
     evidence: "household" satisfies EvidenceClass,
@@ -251,7 +296,7 @@ export function evaluateRequirement(
     // Core guidance stays in the count; dismissing it is flagged, not hidden.
     return {
       ...common,
-      status: "needs-review",
+      status: "attention",
       satisfied: false,
       counted: def.level === "core",
       reason: "Core guidance can’t be excluded — restore it to continue",
@@ -270,11 +315,15 @@ export function evaluateRequirement(
         ? best.rank === "met"
           ? "met"
           : best.rank
-        : best.rank === "partial"
-          ? "in-progress"
-          : best.rank === "stale"
-            ? "needs-review"
-            : "not-started";
+        : best.rank === "linked"
+          ? best.incomplete
+            ? "needs-evidence"
+            : "linked"
+          : best.rank === "partial"
+            ? "in-progress"
+            : best.rank === "stale"
+              ? "attention"
+              : "not-started";
     reason = best.rank === "none" && stale ? stale.reason : best.reason;
   } else {
     const done = results.filter(satisfiedRank);
@@ -288,11 +337,12 @@ export function evaluateRequirement(
             : "confirmed";
       reason = results.map((r) => r.reason).join(" · ");
     } else if (results.some((r) => r.rank === "stale")) {
-      status = "needs-review";
+      status = "attention";
       reason = results.find((r) => r.rank === "stale")!.reason;
     } else {
       status =
-        done.length > 0 || results.some((r) => r.rank === "partial")
+        done.length > 0 ||
+        results.some((r) => r.rank === "partial" || r.rank === "linked")
           ? "in-progress"
           : "not-started";
       reason = results.find((r) => !satisfiedRank(r))!.reason;
@@ -617,7 +667,7 @@ export const systemDef = (id: string) => BASELINE_BY_ID.get(id) ?? null;
 /* ---------- Guided plan action ---------- */
 
 export interface PlanAction {
-  kind: "start" | "continue" | "review" | "review-flagged";
+  kind: "start" | "continue" | "review" | "review-changes";
   label: string;
   /** Requirement to open and focus; null opens the whole list for review. */
   targetId: string | null;
@@ -625,25 +675,22 @@ export interface PlanAction {
 
 /**
  * The goal's primary action. Start/Continue lead to the first open core
- * requirement; a goal needing review leads to the flagged requirement first;
- * a complete goal opens its list for review.
+ * requirement (one whose evidence needs attention first); a goal whose
+ * baseline needs review opens what changed; a complete goal opens its list
+ * for review.
  */
 export function planAction(
   c: GoalChecklist,
   status: "met" | "open" | "review",
 ): PlanAction {
   const open = c.requirements.filter((r) => r.counted && !r.satisfied);
-  const flagged = open.find((r) => r.status === "needs-review");
+  const flagged = open.find((r) => r.status === "attention");
   if (status === "review")
-    return {
-      kind: "review-flagged",
-      label: "Review Requirements",
-      targetId: (flagged ?? open[0])?.id ?? null,
-    };
+    return { kind: "review-changes", label: "Review Changes", targetId: null };
   if (c.complete || open.length === 0)
     return { kind: "review", label: "Review Plan", targetId: null };
   const started = c.requirements.some(
-    (r) => r.satisfied || r.status === "in-progress",
+    (r) => r.satisfied || isUnderway(r.status),
   );
   return {
     kind: started ? "continue" : "start",

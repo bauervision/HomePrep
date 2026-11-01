@@ -100,7 +100,7 @@ describe("objective essentials", () => {
     expect(method(taskOnly).status).toBe("evidence");
     expect(taskOnly.met).toBe(false);
     expect(taskOnly.status).toBe("review");
-    expect(taskOnly.reviewNote).toMatch(/Previously met/);
+    expect(taskOnly.reviewNote).toMatch(/its starter task was complete/);
 
     const confirmed = cooking([done("7d:cooking", "7d")], {
       memberCount: 5,

@@ -8,6 +8,7 @@ import {
   query,
   type DocumentData,
   type QueryConstraint,
+  where,
 } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { db } from "./firebase";
@@ -78,6 +79,51 @@ export function useCollection<T extends { id: string }>(
     loadingMore: !!previousPage,
     /** True when a limited query filled its page, so more may exist. */
     hasMore: options.limit != null && data.length >= options.limit,
+    error: current?.error ?? null,
+  };
+}
+
+/**
+ * Live query of a top-level collection with equality filters, e.g.
+ * invitations of one type and household. Null filters mean "don't query".
+ */
+export function useWhere<T extends { id: string }>(
+  path: string,
+  filters: Record<string, string> | null,
+) {
+  const key = filters ? `${path}|${JSON.stringify(filters)}` : "";
+  const [snap, setSnap] = useState<Snapshot<T> | null>(null);
+
+  useEffect(() => {
+    if (!key) return;
+    const [p, json] = [
+      key.slice(0, key.indexOf("|")),
+      key.slice(key.indexOf("|") + 1),
+    ];
+    const f = JSON.parse(json) as Record<string, string>;
+    const q = query(
+      collection(db(), p),
+      ...Object.entries(f).map(([k, v]) => where(k, "==", v)),
+    );
+    return onSnapshot(
+      q,
+      (s) =>
+        setSnap({
+          key,
+          base: key,
+          data: s.docs.map(
+            (d) => ({ id: d.id, ...(d.data() as DocumentData) }) as T,
+          ),
+          error: null,
+        }),
+      (err) => setSnap({ key, base: key, data: [], error: err.message }),
+    );
+  }, [key]);
+
+  const current = snap?.key === key ? snap : null;
+  return {
+    data: current?.data ?? ([] as T[]),
+    loading: !!key && !current,
     error: current?.error ?? null,
   };
 }

@@ -168,13 +168,13 @@ describe("requirement evaluation", () => {
     expect(
       evaluateRequirement(d, d.id, linked[d.id], ctx({ items: [kit] })),
     ).toMatchObject({ status: "evidence", reason: "Item" });
-    // Used up, expired, or deleted → needs review.
+    // Used up, expired, or deleted → needs attention.
     const empty = { ...kit, quantity: 0 };
     const expired = { ...kit, expiresOn: "2026-01-01" };
     for (const items of [[empty], [expired], []]) {
       expect(
         evaluateRequirement(d, d.id, linked[d.id], ctx({ items })).status,
-      ).toBe("needs-review");
+      ).toBe("attention");
     }
     expect(apply(linked, d.id, unlinkItem("kit"))[d.id]).toBeUndefined();
   });
@@ -198,7 +198,7 @@ describe("requirement evaluation", () => {
       completion: {
         mode: "all",
         conditions: [
-          { kind: "inventory", category: "Medical" },
+          { kind: "inventory", category: "Medical", sufficient: true },
           { kind: "task", seedKey: "medical" },
           { kind: "attest" },
         ],
@@ -306,9 +306,11 @@ describe("household customization", () => {
     const r = e.checklist.requirements.find(
       (x) => x.id === "72h.medical.info",
     )!;
-    expect(r).toMatchObject({ status: "needs-review", counted: true });
+    expect(r).toMatchObject({ status: "attention", counted: true });
     expect(e.met).toBe(false);
-    expect(e.status).toBe("review");
+    // Needs attention on the requirement; the baseline itself didn't change.
+    expect(e.status).toBe("open");
+    expect(planAction(e.checklist, e.status).targetId).toBe("72h.medical.info");
     expect(e.checklist.core).toEqual({ done: 3, applicable: 4 });
   });
 
@@ -351,11 +353,26 @@ describe("goal completion", () => {
     const e = essential("72h", "sanitation", [tp]);
     expect(e.met).toBe(false);
     expect(e.status).toBe("review"); // met the earlier any-item rule
-    // Even linked, it supports one requirement only.
-    const linked = apply({}, "72h.sanitation.hygiene", linkItem("tp"));
+    // Linked, it is evidence the household selected — not proof of
+    // towelettes, garbage bags and plastic ties, or of soap.
+    const linked = apply(
+      apply({}, "72h.sanitation.supplies", linkItem("tp")),
+      "72h.sanitation.hygiene",
+      linkItem("tp"),
+    );
     const after = essential("72h", "sanitation", [tp], linked);
     expect(after.met).toBe(false);
-    expect(after.checklist.core).toEqual({ done: 1, applicable: 3 });
+    expect(after.checklist.core).toEqual({ done: 0, applicable: 3 });
+    const supplies = after.checklist.requirements[0];
+    expect(supplies).toMatchObject({
+      id: "72h.sanitation.supplies",
+      status: "needs-evidence",
+      satisfied: false,
+    });
+    expect(supplies.reason).toBe(
+      "Toilet paper linked. Confirm you also have: Moist towelettes, garbage bags, plastic ties",
+    );
+    expect(after.checklist.requirements[2].status).toBe("not-started");
   });
 
   it("does not treat a first aid kit as medication continuity", () => {
@@ -512,7 +529,7 @@ describe("household goals linked to tasks", () => {
     // A deleted task is flagged, not silently treated as done.
     expect(
       evaluateRequirement(null, "custom-t", s["custom-t"], ctx()).status,
-    ).toBe("needs-review");
+    ).toBe("attention");
   });
 
   it("lets a confirm-method goal be confirmed or completed by its task", () => {
@@ -582,9 +599,10 @@ describe("plan action", () => {
     });
     const tp = item({ category: "Sanitation" });
     const flagged = essential("72h", "sanitation", [tp]);
-    expect(planAction(flagged.checklist, flagged.status)).toMatchObject({
-      label: "Review Requirements",
-      targetId: "72h.sanitation.supplies",
+    expect(planAction(flagged.checklist, flagged.status)).toEqual({
+      kind: "review-changes",
+      label: "Review Changes",
+      targetId: null,
     });
   });
 });

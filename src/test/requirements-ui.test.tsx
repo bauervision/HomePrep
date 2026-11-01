@@ -230,9 +230,9 @@ describe("every requirement is shown", () => {
     expect(countedRows()).toHaveLength(3);
     // 240 rolls recorded: the goal needs review, it is not met.
     expect(goalBadge()).toBe("Needs review");
-    expect(planButton().textContent).toBe("Review Requirements");
-    expect(screen.getByRole("note").textContent).toMatch(
-      /Previously met by recorded Sanitation items/,
+    expect(planButton().textContent).toBe("Review Changes");
+    expect(screen.getByTestId("baseline-review").textContent).toMatch(
+      /marked this goal met because you had recorded Sanitation items/,
     );
 
     expand("72h.sanitation.supplies");
@@ -586,7 +586,7 @@ describe("evidence", () => {
     });
     await waitFor(() =>
       expect(
-        within(row("72h.medical.first-aid")).getByText("Needs review"),
+        within(row("72h.medical.first-aid")).getByText("Needs attention"),
       ).toBeTruthy(),
     );
   });
@@ -833,5 +833,105 @@ describe("dashboard and goals agree", () => {
       }
       v.unmount();
     }
+  });
+});
+
+describe("baseline review", () => {
+  it("explains the change and clears it on acknowledgment, completing nothing", async () => {
+    await openGoal("/goals/?milestone=72h&goal=sanitation");
+    expect(goalBadge()).toBe("Needs review");
+    fireEvent.click(planButton());
+    const panel = screen.getByTestId("baseline-review");
+    expect(panel.textContent).toMatch(/What changed/);
+    expect(panel.textContent).toMatch(
+      /Towelettes, garbage bags and plastic ties · added/,
+    );
+    expect(
+      within(screen.getByTestId("review-remaining")).getAllByRole("listitem"),
+    ).toHaveLength(3);
+    expect(panel.textContent).toMatch(
+      /Recorded Sanitation items: Toilet paper/,
+    );
+    expect(panel.textContent).toMatch(/doesn’t mark anything complete/);
+    const before = structuredClone(state());
+    await act(async () => {
+      fireEvent.click(
+        within(panel).getByRole("button", { name: "Acknowledge changes" }),
+      );
+    });
+    const h = fakeDb.get("households/h1") as unknown as Household;
+    expect(h.baselineReviews?.["72h.sanitation"]).toMatchObject({
+      version: 2,
+      by: "Alex",
+    });
+    expect(state()).toEqual(before);
+    await waitFor(() => expect(goalBadge()).toBe("Open"));
+    expect(screen.queryByTestId("baseline-review")).toBeNull();
+    expect(tally()).toBe("0 of 3 done");
+    expect(planButton().textContent).toBe("Start Plan");
+  });
+
+  it("shows the acknowledged status on the Dashboard too", async () => {
+    fakeDb.set("households/h1", {
+      ...(fakeDb.get("households/h1") as object),
+      baselineReviews: {
+        "72h.sanitation": { version: 2, at: "2026-11-01", by: "Alex" },
+      },
+    });
+    mount(<DashboardPage />);
+    const s = await screen.findByTestId("essential-sanitation");
+    expect(within(s).getByRole("img").getAttribute("aria-label")).toBe(
+      "Not met",
+    );
+    expect(s.textContent).toContain("0 / 3 done");
+  });
+});
+
+describe("inventory evidence", () => {
+  it("marks toilet paper as needing more evidence for garbage bags", async () => {
+    await openGoal("/goals/?milestone=72h&goal=sanitation");
+    expand("72h.sanitation.supplies");
+    const r = row("72h.sanitation.supplies");
+    expect(within(r).getByTestId("link-guidance").textContent).toMatch(
+      /Covers: Moist towelettes, Garbage bags, Plastic ties/,
+    );
+    await act(async () => {
+      set(
+        within(r).getByLabelText(
+          "Link an inventory item to Towelettes, garbage bags and plastic ties",
+        ),
+        "tp",
+      );
+    });
+    await waitFor(() => expect(r.dataset.status).toBe("needs-evidence"));
+    expect(within(r).getByText("Needs additional evidence")).toBeTruthy();
+    expect(within(r).queryByText("Evidence supported")).toBeNull();
+    expect(tally()).toBe("0 of 3 done");
+    // The link is kept and can be removed or replaced.
+    expect(state()["72h.sanitation.supplies"].inventoryIds).toEqual(["tp"]);
+    expect(
+      within(r).getByRole("button", { name: /Unlink Toilet paper/ }),
+    ).toBeTruthy();
+  });
+
+  it("lets toilet paper support a household TP goal", async () => {
+    setState({
+      "custom-tp": {
+        custom: {
+          milestone: "72h",
+          goal: "sanitation",
+          title: "TP stockpile",
+          explanation: "",
+          createdAt: "2026-11-01T00:00:00.000Z",
+        },
+        inventoryIds: ["tp"],
+        updatedAt: "2026-11-01T00:00:00.000Z",
+      },
+    });
+    await openGoal("/goals/?milestone=72h&goal=sanitation");
+    expect(
+      within(row("custom-tp")).getByText("Evidence supported"),
+    ).toBeTruthy();
+    expect(tally()).toBe("1 of 4 done");
   });
 });

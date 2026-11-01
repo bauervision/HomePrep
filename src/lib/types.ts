@@ -87,6 +87,16 @@ export interface RequirementRecord {
 }
 export type RequirementState = Record<string, RequirementRecord>;
 
+/**
+ * Baseline acknowledgments, keyed by `${milestone}.${goal}`: the version of
+ * the goal's recommendations the household reviewed. A version number, not a
+ * flag, so a later baseline change asks for review again.
+ */
+export type BaselineReviews = Record<
+  string,
+  { version: number; at: string; by: string }
+>;
+
 export interface Household {
   id: string;
   name: string;
@@ -104,19 +114,88 @@ export interface Household {
   profileVersion?: number;
   targetOverrides?: TargetOverrides;
   requirementState?: RequirementState;
+  baselineReviews?: BaselineReviews;
   createdAt?: Timestamp;
+  /** Owner invitation the household was founded from (0.7.0 and later). */
+  invitationId?: string;
   seedVersion?: number;
   /** Starter-template version applied per milestone (see lib/seed.ts). */
   seedTemplates?: Partial<Record<MilestoneKey, number>>;
 }
+
+/**
+ * owner    — founded the household (Household.ownerUid); manages it and its
+ *            membership, including co-owners. Exactly one; never removed.
+ * co-owner — shares administration: invites members and removes members.
+ * member   — uses and contributes to the household's preparedness data.
+ */
+export type HouseholdRole = "owner" | "co-owner" | "member";
+export const ROLE_LABEL: Record<HouseholdRole, string> = {
+  owner: "Owner",
+  "co-owner": "Co-owner",
+  member: "Member",
+};
 
 export interface Member {
   uid: string;
   displayName: string;
   email: string;
   photoURL: string | null;
-  role: "owner" | "member";
+  role: HouseholdRole;
   joinedAt?: Timestamp;
+  /** Invitation this membership was created from (0.7.0 and later). */
+  invitationId?: string;
+}
+
+export type InvitationType = "owner" | "member";
+export type InvitationStatus = "pending" | "accepted" | "revoked";
+
+/**
+ * An invitation addressed to one email. Owner invitations (platform admin)
+ * found a new household; member invitations (owner / co-owner) join an
+ * existing one. Expiry is derived from the server-set `createdAt`.
+ */
+export interface Invitation {
+  id: string;
+  type: InvitationType;
+  email: string;
+  role: HouseholdRole;
+  /** Target household (member); the founded household once accepted (owner). */
+  householdId: string | null;
+  householdName: string | null;
+  createdBy: string;
+  createdByName: string;
+  createdAt: Timestamp | null;
+  status: InvitationStatus;
+  acceptedBy: string | null;
+  acceptedAt: Timestamp | null;
+  revokedBy: string | null;
+  revokedAt: Timestamp | null;
+}
+
+/** Platform registration summary of a household (no household content). */
+export interface Registration {
+  id: string;
+  name: string;
+  ownerUid: string;
+  ownerEmail: string;
+  /** Owner invitation it was founded from; "bootstrap" for migrated ones. */
+  invitationId: string;
+  memberCount: number;
+  status: "active";
+  createdAt: Timestamp | null;
+  updatedAt?: Timestamp | null;
+  lastChange?: string;
+}
+
+export interface AuditEntry {
+  id: string;
+  action: "created" | "revoked" | "accepted";
+  invitationId: string;
+  email: string;
+  householdId: string | null;
+  actorUid: string;
+  at: Timestamp | null;
 }
 
 export interface InventoryItem {
@@ -203,17 +282,6 @@ export interface Comment {
   authorUid: string;
   authorName: string;
   createdAt?: Timestamp | null;
-}
-
-export interface Invite {
-  id: string;
-  householdId: string;
-  createdBy: string;
-  createdByName: string;
-  createdAt?: Timestamp;
-  expiresAt: Timestamp;
-  usedBy: string | null;
-  usedAt: Timestamp | null;
 }
 
 export interface Note {

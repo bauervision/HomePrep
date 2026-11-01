@@ -53,14 +53,41 @@ class FakeTimestamp {
   }
 }
 
+/** Deep copy that keeps timestamps as timestamps (they are immutable). */
+function clone<T>(v: T): T {
+  if (v instanceof FakeTimestamp || v === null || typeof v !== "object")
+    return v;
+  if (Array.isArray(v)) return v.map(clone) as T;
+  return Object.fromEntries(
+    Object.entries(v as object).map(([k, x]) => [k, clone(x)]),
+  ) as T;
+}
+
 const SERVER_TS = Symbol("serverTimestamp");
-const resolve = (data: Data): Data =>
+class Increment {
+  constructor(readonly by: number) {}
+}
+/** Resolves sentinels; increments add to the current value. */
+const resolve = (data: Data, current?: Data): Data =>
   Object.fromEntries(
     Object.entries(data).map(([k, v]) => [
       k,
-      v === SERVER_TS ? new FakeTimestamp(Date.now()) : v,
+      v === SERVER_TS
+        ? new FakeTimestamp(Date.now())
+        : v instanceof Increment
+          ? (Number(current?.[k]) || 0) + v.by
+          : v,
     ]),
   );
+
+function update(path: string, data: Data) {
+  const cur = store.get(path);
+  if (!cur)
+    throw Object.assign(new Error(`No document to update: ${path}`), {
+      code: "not-found",
+    });
+  store.set(path, { ...cur, ...resolve(data, cur) });
+}
 
 const parentPath = (path: string) => path.split("/").slice(0, -1).join("/");
 const lastSegment = (path: string) => path.split("/").pop()!;
@@ -93,7 +120,7 @@ function docSnapshot(path: string) {
   return {
     id: lastSegment(path),
     exists: () => v !== undefined,
-    data: () => (v === undefined ? undefined : structuredClone(v)),
+    data: () => (v === undefined ? undefined : clone(v)),
     metadata: { hasPendingWrites: false, fromCache: false },
   };
 }
@@ -114,7 +141,7 @@ function collectionDocs(q: Query) {
     });
   }
   if (q.limit != null) docs = docs.slice(0, q.limit);
-  return docs.map((d) => ({ id: d.id, data: () => structuredClone(d.v) }));
+  return docs.map((d) => ({ id: d.id, data: () => clone(d.v) }));
 }
 
 const toQuery = (t: ColRef | Query): Query =>
@@ -126,6 +153,37 @@ export const firestoreModule = {
   Timestamp: FakeTimestamp,
   getFirestore: () => DB,
   serverTimestamp: () => SERVER_TS,
+  increment: (n: number) => new Increment(n),
+  writeBatch: () => {
+    const writes: (() => void)[] = [];
+    const batch = {
+      set: (ref: DocRef, d: Data) => {
+        writes.push(() => store.set(ref.path, resolve(d)));
+        return batch;
+      },
+      update: (ref: DocRef, d: Data) => {
+        writes.push(() => update(ref.path, d));
+        return batch;
+      },
+      delete: (ref: DocRef) => {
+        writes.push(() => store.delete(ref.path));
+        return batch;
+      },
+      commit: async () => {
+        consumeFailure("commit");
+        const before = new Map(store);
+        try {
+          writes.forEach((w) => w());
+        } catch (err) {
+          store.clear();
+          before.forEach((v, k) => store.set(k, v));
+          throw err;
+        }
+        notify();
+      },
+    };
+    return batch;
+  },
   collection: (parent: unknown, ...segments: string[]): ColRef => {
     const path = pathOf(parent, segments);
     return { type: "collection", path, id: lastSegment(path) };
@@ -210,12 +268,7 @@ export const firestoreModule = {
   },
   updateDoc: async (ref: DocRef, data: Data) => {
     consumeFailure("write");
-    const cur = store.get(ref.path);
-    if (!cur)
-      throw Object.assign(new Error(`No document to update: ${ref.path}`), {
-        code: "not-found",
-      });
-    store.set(ref.path, { ...cur, ...resolve(data) });
+    update(ref.path, data);
     notify();
   },
   deleteDoc: async (ref: DocRef) => {
@@ -229,21 +282,25 @@ export const firestoreModule = {
       get: (r: DocRef) => Promise<ReturnType<typeof docSnapshot>>;
       set: (r: DocRef, d: Data) => void;
       update: (r: DocRef, d: Data) => void;
+      delete: (r: DocRef) => void;
     }) => Promise<T>,
   ): Promise<T> => {
     const writes: (() => void)[] = [];
     const result = await fn({
       get: async (ref) => docSnapshot(ref.path),
       set: (ref, d) => writes.push(() => store.set(ref.path, resolve(d))),
-      update: (ref, d) =>
-        writes.push(() => {
-          const cur = store.get(ref.path);
-          if (!cur) throw new Error(`No document to update: ${ref.path}`);
-          store.set(ref.path, { ...cur, ...resolve(d) });
-        }),
+      update: (ref, d) => writes.push(() => update(ref.path, d)),
+      delete: (ref) => writes.push(() => store.delete(ref.path)),
     });
     consumeFailure("commit");
-    writes.forEach((w) => w());
+    const before = new Map(store);
+    try {
+      writes.forEach((w) => w());
+    } catch (err) {
+      store.clear();
+      before.forEach((v, k) => store.set(k, v));
+      throw err;
+    }
     notify();
     return result;
   },
