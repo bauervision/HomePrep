@@ -3,19 +3,34 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "hosting": {
-    "site": "homeprep",
-    "public": "out",
-    "cleanUrls": true,
-    "trailingSlash": true,
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**",
-      "example.png",
-      "pattern.jpg"
-    ]
-  },
+  "hosting": [
+    {
+      "site": "homeprep-d41cd",
+      "public": "out",
+      "cleanUrls": true,
+      "trailingSlash": true,
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "example.png",
+        "pattern.jpg"
+      ]
+    },
+    {
+      "site": "homeprep",
+      "public": "out",
+      "cleanUrls": true,
+      "trailingSlash": true,
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "example.png",
+        "pattern.jpg"
+      ]
+    }
+  ],
   "emulators": {
     "firestore": {
       "host": "127.0.0.1",

@@ -5,6 +5,18 @@ inlined at build time (`next.config.ts` → `NEXT_PUBLIC_APP_VERSION`) and shown
 on the sign-in page, beneath "HomePrep" in the navbar, and in `/version.json`.
 The browser never reads `package.json`.
 
+## Production
+
+| Site      | Hosting site ID  | URL                                                      |
+| --------- | ---------------- | -------------------------------------------------------- |
+| Canonical | `homeprep-d41cd` | https://homeprep-d41cd.web.app (also `.firebaseapp.com`) |
+| Secondary | `homeprep`       | https://homeprep.web.app                                 |
+
+Firebase project: `homeprep-d41cd`. `firebase.json` lists both sites under
+`hosting`, so one hosting deploy publishes the same `out/` build to both.
+Every Firebase command passes `--project homeprep-d41cd --account
+mikecbauervision@gmail.com`; never change the global CLI account.
+
 ## Classification (semantic versioning)
 
 | Kind      | Use for                                                     |
@@ -30,9 +42,22 @@ explicit approval and `--allow-major`.
 5. **Verify the build:** `pnpm release:verify` (compares `out/version.json`
    with `package.json`).
 6. **Commit** the release (when authorized).
-7. **Deploy** only when authorized: `firebase deploy --only hosting`
-   (rules separately: `firebase deploy --only firestore:rules`).
-8. **Report:** `pnpm release:verify https://homeprep-d41cd.web.app`
+7. **Deploy** only when authorized. Rules first when they changed, then
+   hosting to both sites from the same build:
+
+   ```sh
+   firebase deploy --only firestore:rules --project homeprep-d41cd --account mikecbauervision@gmail.com
+   firebase deploy --only hosting:homeprep-d41cd,hosting:homeprep --project homeprep-d41cd --account mikecbauervision@gmail.com
+   ```
+
+8. **Report:** check every address serves the new version:
+
+   ```sh
+   pnpm release:verify https://homeprep-d41cd.web.app
+   pnpm release:verify https://homeprep-d41cd.firebaseapp.com
+   pnpm release:verify https://homeprep.web.app
+   ```
+
 9. **Tag:** `pnpm release:tag` creates the local `vX.Y.Z` tag. Push it only
    when authorized: `git push origin vX.Y.Z`.
 
