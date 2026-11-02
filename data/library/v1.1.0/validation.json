@@ -1,0 +1,318 @@
+{
+  "passed": true,
+  "packaged_on": "2026-11-02",
+  "checks": [
+    {
+      "check": "unique_ids_complete_references_and_safe_display_flags",
+      "passed": true
+    },
+    {
+      "check": "unique_source_evidence_correction_topic_ids",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/001-farmers-water-independence/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/001-farmers-water-independence/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B001",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B001",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/002-pioneers-self-sufficient/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/002-pioneers-self-sufficient/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B002",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B002",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/003-grandmas-food-preservation/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/003-grandmas-food-preservation/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B003",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B003",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/004-foragers-wild-food/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/004-foragers-wild-food/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B004",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B004",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/005-preppers-economic-depression/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/005-preppers-economic-depression/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B005",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B005",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/006-cyber-sabotage-cold-chains/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/006-cyber-sabotage-cold-chains/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B006",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B006",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/007-off-grid-diy-blackout/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/007-off-grid-diy-blackout/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B007",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B007",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/008-former-amish-survival/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/008-former-amish-survival/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B008",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B008",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/009-four-acre-self-sufficient-farm/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/009-four-acre-self-sufficient-farm/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B009",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B009",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/010-army-engineer-emp-proof-home/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/010-army-engineer-emp-proof-home/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B010",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B010",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:authoritative-core/core.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:authoritative-core/core.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "source_and_entry_counts",
+      "passed": true
+    },
+    {
+      "check": "classification_counts",
+      "passed": true
+    },
+    {
+      "check": "totals_match",
+      "passed": true
+    },
+    {
+      "check": "verified_principles_require_original_support",
+      "passed": true
+    },
+    {
+      "check": "correction_evidence_resolves",
+      "passed": true
+    },
+    {
+      "check": "historical_dates_retained",
+      "passed": true
+    },
+    {
+      "check": "no_implicit_household_actions",
+      "passed": true
+    },
+    {
+      "check": "guidance_default",
+      "passed": true
+    },
+    {
+      "check": "runtime_file_hashes",
+      "passed": true
+    },
+    {
+      "check": "runtime_guidance_exactly_matches",
+      "passed": true
+    },
+    {
+      "check": "runtime_index_no_original_claims_or_components",
+      "passed": true
+    },
+    {
+      "check": "runtime_index_lossless_projection",
+      "passed": true
+    },
+    {
+      "check": "runtime_book_details_exactly_match",
+      "passed": true
+    },
+    {
+      "check": "runtime_detail_paths_resolve",
+      "passed": true
+    },
+    {
+      "check": "old_entries_lossless_and_stable",
+      "passed": true
+    },
+    {
+      "check": "unchanged_core_cards",
+      "passed": true
+    },
+    {
+      "check": "content_versions_consistent",
+      "passed": true
+    },
+    {
+      "check": "previous_package_unchanged",
+      "passed": true
+    },
+    {
+      "check": "exact_added_books",
+      "passed": true
+    },
+    {
+      "check": "no_pdfs_in_runtime",
+      "passed": true
+    },
+    {
+      "check": "source_components_preserved_in_new_books",
+      "passed": true
+    },
+    {
+      "check": "semantic_negative_controls",
+      "passed": true
+    }
+  ],
+  "negative_controls": [
+    {
+      "case": "automatic_action",
+      "rejected": true
+    },
+    {
+      "case": "mislabel_unverified",
+      "rejected": true
+    },
+    {
+      "case": "broken_evidence",
+      "rejected": true
+    }
+  ],
+  "totals": {
+    "total_entries": 2146,
+    "book_review_entries": 2122,
+    "authoritative_core_entries": 24,
+    "books": 10,
+    "book_classifications": {
+      "needs_review": 1051,
+      "source_derived_reference": 988,
+      "verified_guidance": 83
+    },
+    "topics": 11,
+    "evidence_records": 246,
+    "corrections": 172
+  },
+  "limitations": [
+    "Adapter checks do not re-verify source claims or test the not-yet-implemented app UI.",
+    "Runtime projections are checked against the canonical bundle; the canonical bundle has separate Draft 7 validation."
+  ],
+  "schema_validation": {
+    "dialect": "JSON Schema Draft 7",
+    "validator": "PowerShell Test-Json / JsonSchema.Net",
+    "negative_controls": {
+      "unknown_classification": {
+        "rejected": true
+      },
+      "missing_core_evidence": {
+        "rejected": true
+      },
+      "automatic_action": {
+        "rejected": true
+      }
+    },
+    "passed": true
+  }
+}

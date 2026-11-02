@@ -4,7 +4,7 @@
  * nothing here is a task, inventory item, requirement or readiness credit.
  */
 
-export const LIBRARY_VERSION = "1.0.0";
+export const LIBRARY_VERSION = "1.1.0";
 
 /** Display status after validation. Anything unrecognized is "unavailable". */
 export type DisplayStatus =
