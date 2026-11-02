@@ -218,7 +218,7 @@ export function TopBar() {
   const items = navFor(!!admin);
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-[#040b11]/80 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:gap-5 sm:px-5">
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:gap-5 sm:px-5 lg:gap-3 xl:gap-5">
         <Link
           href="/"
           className="shrink-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-amber"
@@ -238,7 +238,8 @@ export function TopBar() {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cx(
-                  "relative flex items-center gap-1.5 rounded-md px-2.5 py-2 text-sm whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-amber",
+                  // Tighter between lg and xl so every destination fits.
+                  "relative flex items-center gap-1.5 rounded-md px-1.5 py-2 text-sm whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-amber xl:px-2.5",
                   active ? "text-ivory" : "text-sage hover:text-ivory",
                 )}
               >
@@ -249,7 +250,7 @@ export function TopBar() {
                 />
                 {label}
                 {active && (
-                  <span className="absolute inset-x-2.5 -bottom-[9px] h-0.5 rounded-full bg-gradient-to-r from-copper-light to-copper" />
+                  <span className="absolute inset-x-1.5 -bottom-[9px] h-0.5 rounded-full bg-gradient-to-r from-copper-light to-copper xl:inset-x-2.5" />
                 )}
               </Link>
             );

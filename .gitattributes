@@ -1,0 +1,3 @@
+# Versioned Library data is hashed; never convert line endings.
+public/library-data/** -text
+data/library/** -text

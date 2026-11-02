@@ -311,6 +311,8 @@ describe("household membership", () => {
       <HouseholdPage />,
     );
     await screen.findByLabelText("Email");
+    // Members arrive from their own snapshot; don't assume they beat the form.
+    await screen.findByTestId("member-kid");
     expect(screen.queryByLabelText("Role")).toBeNull();
     expect(screen.queryByLabelText(/^Role for/)).toBeNull();
     expect(

@@ -4,3 +4,6 @@ node_modules
 pnpm-lock.yaml
 next-env.d.ts
 AGENTS.md
+# Versioned Library data must stay byte-identical to its manifest hashes.
+public/library-data
+data/library

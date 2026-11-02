@@ -201,15 +201,19 @@ const TONE: Record<Tone, string> = {
 
 export function Badge({
   tone = "neutral",
+  wrap = false,
   children,
 }: {
   tone?: Tone;
+  /** Lets long labels wrap instead of overflowing narrow screens. */
+  wrap?: boolean;
   children: ReactNode;
 }) {
   return (
     <span
       className={cx(
-        "inline-flex items-center rounded-md px-1.5 py-[3px] text-[11px] leading-none font-medium whitespace-nowrap ring-1 ring-inset",
+        "inline-flex items-center rounded-md px-1.5 py-[3px] text-[11px] font-medium ring-1 ring-inset",
+        wrap ? "leading-tight" : "leading-none whitespace-nowrap",
         TONE[tone],
       )}
     >

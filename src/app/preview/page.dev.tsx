@@ -3,9 +3,10 @@
 // Development-only design preview (excluded from production builds via the
 // `dev.tsx` page extension). Renders real shell/onboarding/dashboard components
 // with fixture sessions and data so layouts can be checked without signing in.
-// Usage: /preview/?screen=signin|onboarding|dashboard|goals|budget|notes|inventory-form|kit|modal
+// Usage: /preview/?screen=signin|onboarding|dashboard|goals|budget|notes|library|inventory-form|kit|modal
 // Dashboard also accepts &objective=7d|30d|60d|90d; goals accepts
-// &milestone=72h|7d…&goal=cooking.
+// &milestone=72h|7d…&goal=cooking. Library accepts its own view/q/topic/
+// book/status/entry parameters and reads the real static Library pack.
 
 import type { User } from "firebase/auth";
 import {
@@ -31,6 +32,7 @@ import { isMilestoneKey } from "@/lib/readiness";
 import { InteriorFrame, Onboarding, SignIn } from "@/components/AppShell";
 import { BudgetView } from "@/components/budget/BudgetView";
 import { NotesView } from "@/components/notes/NotesView";
+import { LibraryView } from "@/components/library/LibraryView";
 import { InventoryItemForm } from "@/components/InventoryItemForm";
 import { Timestamp } from "firebase/firestore";
 import { DashboardView } from "@/components/DashboardView";
@@ -558,6 +560,16 @@ function Screen() {
               tasks={TASKS}
               tasksLoading={false}
             />
+          </InteriorFrame>
+        </Session>
+      );
+    case "library":
+      return (
+        <Session state={ready}>
+          <InteriorFrame>
+            <ClientOnly>
+              <LibraryView />
+            </ClientOnly>
           </InteriorFrame>
         </Session>
       );

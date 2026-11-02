@@ -1,0 +1,138 @@
+{
+  "manifest_version": "1.0.0",
+  "bundle_version": "1.0.0",
+  "packaged_on": "2026-11-02",
+  "files": [
+    {
+      "path": "library.bundle.json",
+      "bytes": 8274333,
+      "sha256": "f5e485f208fe0b1295c5ae048d670caed57067a2e45804c3b25540fdf691dad4"
+    },
+    {
+      "path": "library.schema.json",
+      "bytes": 10177,
+      "sha256": "b6166fd60f503d71ff2f14f3ad0994a1f397a0e1d0420f0173da34e946933d3a"
+    },
+    {
+      "path": "runtime/books/B001.json",
+      "bytes": 699844,
+      "sha256": "e26c25e4c94fc93dff69ada8fecd63aa760ab1e45b3f9e74dc151fc8b0d8eaa7"
+    },
+    {
+      "path": "runtime/books/B002.json",
+      "bytes": 1159869,
+      "sha256": "8f676eca47ef7eaae48900b5f5e5271f2df372f659b9320518d417c15a07d02f"
+    },
+    {
+      "path": "runtime/books/B003.json",
+      "bytes": 552971,
+      "sha256": "3724070d22c2617cac77751ac37958023b352167743369f838e8e7003a392cdf"
+    },
+    {
+      "path": "runtime/books/B004.json",
+      "bytes": 957465,
+      "sha256": "f022f9e90e92b41e3ef77c41ba66e1435f85c60c48c3416b30e8af7cde718dab"
+    },
+    {
+      "path": "runtime/books/B005.json",
+      "bytes": 1064189,
+      "sha256": "30e2a9bf42d74918a60257a476cac0e20006b5da14bc350f91e7ed307a6c8398"
+    },
+    {
+      "path": "runtime/books/B006.json",
+      "bytes": 208710,
+      "sha256": "5a7f1850640fa412acba736489558e6572c808dc57a8fe0a5f92faa93e5736fe"
+    },
+    {
+      "path": "runtime/books/B007.json",
+      "bytes": 1052311,
+      "sha256": "fa71eb2be1a38eeeacdc3681cb2dbfb651083cd3f4ce5e1c25e9636092cd8cec"
+    },
+    {
+      "path": "runtime/guidance.json",
+      "bytes": 92893,
+      "sha256": "f1dfb4090071259caf088017fb8a84cfdf12875d32e308bee0ced7b53a83149b"
+    },
+    {
+      "path": "runtime/reviews-index.json",
+      "bytes": 2585077,
+      "sha256": "5fbbc1235d3714a32101ace5ab29d0b06138bce3326d1193d48f15301c0f1959"
+    }
+  ],
+  "inputs": [
+    {
+      "path": "sources/001-farmers-water-independence/examination.v1.0.0.json",
+      "sha256": "4a772e63964b7a63f4e61fef2ec94b401f704f369bb592cc54d3c40a417ded69"
+    },
+    {
+      "path": "sources/002-pioneers-self-sufficient/examination.v1.0.0.json",
+      "sha256": "c44c518404841e36aa629b36c8d7b5ad6c260cd6787b2cdfa51c7e9c1f011c49"
+    },
+    {
+      "path": "sources/003-grandmas-food-preservation/examination.v1.0.0.json",
+      "sha256": "5d1aa4504fa99f013660ac4c77e57d4166e04462038b507f8112e4c3ba38eea2"
+    },
+    {
+      "path": "sources/004-foragers-wild-food/examination.v1.0.0.json",
+      "sha256": "370fbe74b59ef768ab86a3339160f9881980717e0f011d3dae5b38fc8db9219d"
+    },
+    {
+      "path": "sources/005-preppers-economic-depression/examination.v1.0.0.json",
+      "sha256": "228b4a26e752310ee019463d5dc918dadd8b4fd08215e564a03e5b9c90a21c33"
+    },
+    {
+      "path": "sources/006-cyber-sabotage-cold-chains/examination.v1.0.0.json",
+      "sha256": "ab6466ab6b3ca7f39f901525a8548a46b9db75f5dd53ffa63d99676453b19a19"
+    },
+    {
+      "path": "sources/007-off-grid-diy-blackout/examination.v1.0.0.json",
+      "sha256": "556a7681520ca155c2751ae78fb2a7663b75697542c2daa69f7a16078abf5bb7"
+    },
+    {
+      "path": "authoritative-core/core.v1.0.0.json",
+      "sha256": "df03781dcf1737c4e265bd65bc452db0ba6ca0c1353eb58d043a64ea530eff3f"
+    }
+  ],
+  "totals": {
+    "total_entries": 1490,
+    "book_review_entries": 1466,
+    "authoritative_core_entries": 24,
+    "books": 7,
+    "book_classifications": {
+      "needs_review": 754,
+      "source_derived_reference": 649,
+      "verified_guidance": 63
+    },
+    "topics": 11,
+    "evidence_records": 179,
+    "corrections": 105
+  },
+  "defaults": {
+    "collection": "authoritative_core",
+    "topic": "all",
+    "query": "",
+    "book": "all",
+    "classification": "all"
+  },
+  "labels": {
+    "authority_supported": "Authority-supported guidance",
+    "verified_principle": "Verified principle — limited scope",
+    "source_reference": "Source reference — not independently verified",
+    "needs_review": "Needs review — not approved instructions"
+  },
+  "limitations": [
+    "This is a display adapter, not a new source verification or merging of conflicting procedures.",
+    "Exact book records and core cards are preserved under source_record.",
+    "Private PDFs are not included. Do not publish PDF archives.",
+    "Guidance is a five-person example; do not overwrite the signed-in household profile.",
+    "No service-worker/offline cold-launch capability has been established by this pack.",
+    "Reading, bookmarking or searching never completes a goal, task or readiness requirement."
+  ],
+  "runtime_loading": {
+    "base_path": "/library-data/v1.0.0/",
+    "initial": "runtime/guidance.json",
+    "research_index": "runtime/reviews-index.json",
+    "book_detail_pattern": "runtime/books/{source_id}.json",
+    "note": "Publish the runtime directory contents under the base path. Thus initial HTTP URL is /library-data/v1.0.0/guidance.json, index is reviews-index.json and detail_path resolves relative to that same base. Canonical bundle and schema are development inputs, not landing-page downloads."
+  }
+}

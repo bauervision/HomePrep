@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   LayoutDashboard,
   ShieldCheck,
   ListChecks,
@@ -22,6 +23,7 @@ export const NAV: NavItem[] = [
   { href: "/tasks/", label: "Tasks", icon: ListChecks },
   { href: "/purchases/", label: "Budget", icon: ShoppingCart },
   { href: "/notes/", label: "Notes", icon: NotebookText },
+  { href: "/library/", label: "Library", icon: BookOpen },
   { href: "/household/", label: "Household", icon: Users },
 ];
 

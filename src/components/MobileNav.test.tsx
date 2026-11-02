@@ -30,6 +30,7 @@ vi.mock("next/link", () => ({
 }));
 
 const { MobileNav } = await import("./MobileNav");
+const { navFor } = await import("./nav");
 
 afterEach(cleanup);
 
@@ -60,6 +61,7 @@ describe("MobileNav", () => {
       "Tasks",
       "Budget",
       "Notes",
+      "Library",
       "Household",
     ]);
     expect(within(nav).queryByText("Purchases")).toBeNull();
@@ -117,6 +119,32 @@ describe("MobileNav", () => {
     expect(document.activeElement).toBe(notes);
     fireEvent.click(notes);
     expect(screen.queryByRole("navigation")).toBeNull();
+  });
+
+  it("includes Library, highlights it, and keeps Admin for administrators", () => {
+    render(
+      <MobileNav
+        pathname="/library/"
+        onSignOut={() => {}}
+        items={navFor(true)}
+      />,
+    );
+    expect(trigger().textContent).toContain("Library");
+    fireEvent.click(trigger());
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    const library = within(nav).getByRole("link", { name: "Library" });
+    expect(library.getAttribute("href")).toBe("/library/");
+    expect(library.getAttribute("aria-current")).toBe("page");
+    expect(document.activeElement).toBe(library);
+    const labels = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+    expect(labels.slice(-3)).toEqual(["Library", "Household", "Admin"]);
+    fireEvent.keyDown(nav, { key: "ArrowDown" });
+    expect(document.activeElement?.textContent).toBe("Household");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(document.activeElement).toBe(trigger());
   });
 
   it("supports arrow-key movement between items", () => {
