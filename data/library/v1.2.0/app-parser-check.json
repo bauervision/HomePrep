@@ -1,0 +1,8 @@
+{
+  "passed": true,
+  "scope": "Isolated copy of existing app parser/types with only LIBRARY_VERSION changed to1.2.0; no app files edited; no UI/auth/build test",
+  "core_entries": 24,
+  "review_entries": 3260,
+  "books": 15,
+  "documentary_components": 1374
+}

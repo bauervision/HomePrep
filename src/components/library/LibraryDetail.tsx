@@ -417,12 +417,10 @@ function BookReviewBody({
               <span className="text-ivory-dim"> · {source.author}</span>
             )}
           </p>
-          {chapter && (
-            <p className="text-xs text-slate">
-              {chapter.number !== null && <>Chapter {chapter.number}: </>}
-              {chapter.title}
-            </p>
-          )}
+          {/* Chapter numbers are editorial ordinals (CH00 front matter,
+              unnumbered closing sections, B015's second "Chapter 20"), not the
+              book's own numbering, so only the supplied title is shown. */}
+          {chapter && <p className="text-xs text-slate">{chapter.title}</p>}
           <ul className="mt-1 space-y-0.5 text-xs" aria-label="Citations">
             {full.source_citations.map((c, i) => (
               <li key={i}>

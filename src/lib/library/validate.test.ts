@@ -11,7 +11,7 @@ import {
   safeHttpsUrl,
 } from "./validate";
 
-const PUBLIC = "public/library-data/v1.1.0/";
+const PUBLIC = "public/library-data/v1.2.0/";
 const load = (p: string) => JSON.parse(readFileSync(PUBLIC + p, "utf8"));
 type Raw = Record<string, unknown>;
 const clone = <T>(v: T): T => structuredClone(v);
@@ -102,13 +102,13 @@ describe("book reviews fail closed", () => {
     raw.entries[3].correction_ids = ["C01"];
     raw.entries[4].execution_eligible = true;
     const r = parseReviewsIndex(raw);
-    expect(r.entries).toHaveLength(2122 - 5);
+    expect(r.entries).toHaveLength(3260 - 5);
     expect(r.rejected).toBe(5);
   });
 
   it("only requests detail files under books/", () => {
-    expect(detailUrl("/library-data/v1.1.0/", "books/B001.json")).toBe(
-      "/library-data/v1.1.0/books/B001.json",
+    expect(detailUrl("/library-data/v1.2.0/", "books/B001.json")).toBe(
+      "/library-data/v1.2.0/books/B001.json",
     );
     for (const bad of [
       "../x.json",

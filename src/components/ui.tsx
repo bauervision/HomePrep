@@ -289,7 +289,11 @@ export function Modal({
               <X size={16} aria-hidden />
             </button>
           </header>
-          <div className="overflow-y-auto p-4">{children}</div>
+          {/* `relative` keeps absolutely positioned descendants (sr-only link
+              hints) inside this scroller, so the dialog itself never scrolls. */}
+          <div className="relative overflow-y-auto overscroll-contain p-4">
+            {children}
+          </div>
         </div>
       )}
     </dialog>

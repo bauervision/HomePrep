@@ -9,7 +9,7 @@ import { buildIndex, editDistance, normalize, search } from "./search";
 import { parseGuidance, parseReviewsIndex } from "./validate";
 
 const load = (p: string) =>
-  JSON.parse(readFileSync(`public/library-data/v1.1.0/${p}`, "utf8"));
+  JSON.parse(readFileSync(`public/library-data/v1.2.0/${p}`, "utf8"));
 const g = parseGuidance(load("guidance.json"));
 const r = parseReviewsIndex(load("reviews-index.json"));
 const gi = buildIndex(g.entries, g.topics);
@@ -99,16 +99,16 @@ describe("browse", () => {
       book: null,
       status: null,
     });
-    expect(all.results).toHaveLength(2122);
+    expect(all.results).toHaveLength(3260);
     expect(Object.fromEntries(all.statusCounts)).toEqual({
-      verified_principle: 83,
-      source_reference: 988,
-      needs_review: 1051,
+      verified_principle: 140,
+      source_reference: 1311,
+      needs_review: 1809,
     });
-    expect([...all.bookCounts.values()].reduce((a, b) => a + b)).toBe(2122);
+    expect([...all.bookCounts.values()].reduce((a, b) => a + b)).toBe(3260);
     // Entries can have several topics: facet counts don't sum to the total.
     const topicSum = [...all.topicCounts.values()].reduce((a, b) => a + b);
-    expect(topicSum).toBeGreaterThan(2122);
+    expect(topicSum).toBeGreaterThan(3260);
     expect(all.topics).toHaveLength(11);
   });
 
