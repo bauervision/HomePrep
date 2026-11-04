@@ -1,7 +1,7 @@
 /*
- * Integrity of the imported Library pack (v1.2.0) against its manifest and
+ * Integrity of the imported Library pack (v1.3.0) against its manifest and
  * the canonical bundle kept as a development fixture in data/library/. The
- * previous v1.0.0 and v1.1.0 packs stay in place and must be preserved
+ * previous v1.0.0, v1.1.0 and v1.2.0 packs stay in place and must be preserved
  * record-for-record.
  */
 import { createHash } from "node:crypto";
@@ -9,13 +9,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseBookDetail, parseGuidance, parseReviewsIndex } from "./validate";
 
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 const PUBLIC = `public/library-data/v${VERSION}/`;
 const FIXTURES = `data/library/v${VERSION}/`;
 /** Earlier packs, oldest first, with their manifest file counts. */
 const PREVIOUS = [
   { version: "1.0.0", files: 11 },
   { version: "1.1.0", files: 14 },
+  { version: "1.2.0", files: 19 },
 ];
 
 type Raw = Record<string, unknown> & { id: string };
@@ -60,36 +61,36 @@ function expectManifestHashes(version: string, files: number) {
 
 describe(`Library pack v${VERSION}`, () => {
   it("matches the manifest's sizes and SHA-256 hashes", () => {
-    expectManifestHashes(VERSION, 19);
+    expectManifestHashes(VERSION, 23);
   });
 
-  it("keeps the canonical totals and the 24 / 3,260 runtime split", () => {
-    expect(bundle.entries).toHaveLength(3284);
+  it("keeps the canonical totals and the 24 / 3,714 runtime split", () => {
+    expect(bundle.entries).toHaveLength(3738);
     expect(bundle.totals).toEqual(manifest.totals);
     expect(guidance.content_version).toBe(VERSION);
     expect(index.content_version).toBe(VERSION);
     expect(guidance.entries).toHaveLength(24);
-    expect(index.entries).toHaveLength(3260);
+    expect(index.entries).toHaveLength(3714);
     const ids = [...guidance.entries, ...index.entries].map((e: Raw) => e.id);
-    expect(new Set(ids).size).toBe(3284);
+    expect(new Set(ids).size).toBe(3738);
     expect(ids.every((id) => canonical.has(id))).toBe(true);
     const counts: Record<string, number> = {};
     for (const e of index.entries)
       counts[e.classification] = (counts[e.classification] ?? 0) + 1;
     expect(counts).toEqual({
-      verified_guidance: 140,
-      source_derived_reference: 1311,
-      needs_review: 1809,
+      verified_guidance: 160,
+      source_derived_reference: 1496,
+      needs_review: 2058,
     });
     expect(guidance.topics).toHaveLength(11);
-    expect(bundle.evidence).toHaveLength(393);
-    expect(bundle.corrections).toHaveLength(316);
+    expect(bundle.evidence).toHaveLength(440);
+    expect(bundle.corrections).toHaveLength(419);
   });
 
-  it("resolves all fifteen book detail files from the index", () => {
+  it("resolves all nineteen book detail files from the index", () => {
     expect(Object.keys(books).sort()).toEqual(
       Array.from(
-        { length: 15 },
+        { length: 19 },
         (_, i) => `B${String(i + 1).padStart(3, "0")}`,
       ),
     );
@@ -106,6 +107,10 @@ describe(`Library pack v${VERSION}`, () => {
       B013: 159,
       B014: 215,
       B015: 340,
+      B016: 163,
+      B017: 209,
+      B018: 39,
+      B019: 43,
     });
   });
 
@@ -118,7 +123,7 @@ describe(`Library pack v${VERSION}`, () => {
         detailCount++;
         expect(e).toEqual(canonical.get(e.id));
       }
-    expect(detailCount).toBe(3260);
+    expect(detailCount).toBe(3714);
     // The index is the same record without original claims and components.
     for (const e of index.entries) {
       const { detail_path, ...rest } = e;
@@ -135,9 +140,9 @@ describe(`Library pack v${VERSION}`, () => {
       ...Object.values(books).flatMap((b) => b.evidence),
     ];
     const corrections = Object.values(books).flatMap((b) => b.corrections);
-    expect(evidence).toHaveLength(393);
-    expect(corrections).toHaveLength(316);
-    expect(new Set(evidence.map((e) => e.id)).size).toBe(393);
+    expect(evidence).toHaveLength(440);
+    expect(corrections).toHaveLength(419);
+    expect(new Set(evidence.map((e) => e.id)).size).toBe(440);
     expect(evidence).toEqual(expect.arrayContaining(bundle.evidence));
     expect(corrections).toEqual(expect.arrayContaining(bundle.corrections));
   });
@@ -239,6 +244,40 @@ describe(`Library pack v${VERSION}`, () => {
     expect(JSON.stringify(c)).toMatch(/462\.6215MHz as the book’s error/);
     expect(JSON.stringify(c)).toMatch(/462\.6125MHz/);
   });
+
+  it("keeps B018 and B019 covers unnumbered with their opposite page offsets", () => {
+    for (const id of ["B018-001", "B019-001"])
+      expect(cite(id)).toMatchObject({
+        book_page_start: null,
+        book_page_end: null,
+        pdf_page_start: 1,
+        pdf_page_end: 1,
+      });
+    // B018: PDF 2 is printed page 1. B019: PDF 2 is printed page 3.
+    const offset = { B018: 1, B019: -1 } as const;
+    for (const [book, diff] of Object.entries(offset))
+      for (const e of books[book].entries)
+        for (const c of e.source_citations as Record<string, number | null>[]) {
+          if (c.book_page_start === null) continue;
+          expect(c.pdf_page_start! - c.book_page_start, e.id).toBe(diff);
+          expect(c.pdf_page_end! - c.book_page_end!, e.id).toBe(diff);
+        }
+  });
+
+  it("keeps B018 tactical and B019 canning and wild-plant claims under review", () => {
+    for (const id of ["B018-014", "B018-036", "B018-037", "B018-038"]) {
+      const e = entry(id);
+      expect(e.classification, id).toBe("needs_review");
+      expect(e.safety_flags, id).toContain("unsafe_force_risk");
+      expect(e.correction_ids, id).not.toHaveLength(0);
+    }
+    for (const id of ["B019-008", "B019-019", "B019-023", "B019-042"]) {
+      const e = entry(id);
+      expect(e.classification, id).toBe("needs_review");
+      expect(e.safety_flags, id).toContain("food_safety");
+      expect(e.correction_ids, id).not.toHaveLength(0);
+    }
+  });
 });
 
 describe.each(PREVIOUS)("Preservation of the v$version pack", (prev) => {
@@ -303,15 +342,15 @@ describe("Library parsing of the real pack", () => {
   });
 
   it("keeps every book classification as recorded", () => {
-    expect(r.entries).toHaveLength(3260);
+    expect(r.entries).toHaveLength(3714);
     expect(r.rejected).toBe(0);
-    expect(r.sources).toHaveLength(15);
+    expect(r.sources).toHaveLength(19);
     const counts: Record<string, number> = {};
     for (const e of r.entries) counts[e.status] = (counts[e.status] ?? 0) + 1;
     expect(counts).toEqual({
-      verified_principle: 140,
-      source_reference: 1311,
-      needs_review: 1809,
+      verified_principle: 160,
+      source_reference: 1496,
+      needs_review: 2058,
     });
   });
 
@@ -346,7 +385,7 @@ describe("Library parsing of the real pack", () => {
           expect(d.evidence.has(ev.evidence_id), ev.evidence_id).toBe(true);
       }
     }
-    expect(components).toBe(1374);
-    expect(total).toBe(3260);
+    expect(components).toBe(1533);
+    expect(total).toBe(3714);
   });
 });

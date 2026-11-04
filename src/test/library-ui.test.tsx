@@ -99,7 +99,7 @@ describe("Library: guidance", () => {
     expect(screen.getByRole("status").textContent).toMatch(/Loading guidance/);
     await screen.findByText("24 guidance entries");
     expect(cards()).toHaveLength(24);
-    expect(requested()).toEqual(["/library-data/v1.2.0/guidance.json"]);
+    expect(requested()).toEqual(["/library-data/v1.3.0/guidance.json"]);
     expect(
       screen
         .getByRole("button", { name: /Guidance/ })
@@ -264,7 +264,7 @@ describe("Library: loading failures", () => {
     cleanup();
     override = (url) =>
       url.endsWith("reviews-index.json")
-        ? new Response(JSON.stringify({ content_version: "1.2.0" }), {
+        ? new Response(JSON.stringify({ content_version: "1.3.0" }), {
             status: 200,
           })
         : undefined;
@@ -280,7 +280,7 @@ describe("Library: loading failures", () => {
     first.unmount();
     open();
     await screen.findByText("24 guidance entries");
-    expect(requested()).toEqual(["/library-data/v1.2.0/guidance.json"]);
+    expect(requested()).toEqual(["/library-data/v1.3.0/guidance.json"]);
   });
 });
 
@@ -290,8 +290,8 @@ describe("Library: book reviews", () => {
     await screen.findByText("24 guidance entries");
     fireEvent.click(screen.getByRole("button", { name: /Book reviews/ }));
     expect(params().get("view")).toBe("reviews");
-    await screen.findByText("3,260 book review records · showing 24");
-    expect(requested()).toContain("/library-data/v1.2.0/reviews-index.json");
+    await screen.findByText("3,714 book review records · showing 24");
+    expect(requested()).toContain("/library-data/v1.3.0/reviews-index.json");
     expect(requested().some((u) => u.includes("/books/"))).toBe(false);
     expect(cards()).toHaveLength(24);
     expect(document.body.textContent).toMatch(/unresolved claims/);
@@ -308,9 +308,9 @@ describe("Library: book reviews", () => {
         .map((o) => o.textContent),
     ).toEqual([
       "All review statuses",
-      "Verified principle — limited scope (140)",
-      "Source reference — not independently verified (1,311)",
-      "Needs review — not approved instructions (1,809)",
+      "Verified principle — limited scope (160)",
+      "Source reference — not independently verified (1,496)",
+      "Needs review — not approved instructions (2,058)",
     ]);
 
     fireEvent.click(screen.getByRole("button", { name: /Show more/ }));
@@ -318,7 +318,7 @@ describe("Library: book reviews", () => {
     fireEvent.change(status, { target: { value: "verified" } });
     expect(params().get("status")).toBe("verified");
     await screen.findByText(
-      "140 of 3,260 book review records match · showing 24",
+      "160 of 3,714 book review records match · showing 24",
     );
     expect(cards()).toHaveLength(24); // pagination reset
     for (const c of cards())
@@ -327,7 +327,7 @@ describe("Library: book reviews", () => {
     fireEvent.change(book, { target: { value: "B006" } });
     fireEvent.change(status, { target: { value: "" } });
     await screen.findByText(
-      "58 of 3,260 book review records match · showing 24",
+      "58 of 3,714 book review records match · showing 24",
     );
     fireEvent.click(pill(/^Food and preservation/));
     for (const c of cards()) expect(c.textContent).toMatch(/Cyber Sabotage/);
@@ -378,9 +378,9 @@ describe("Library: book reviews", () => {
       d.textContent!.indexOf("Original source material"),
     );
     expect(requested()).toEqual([
-      "/library-data/v1.2.0/guidance.json",
-      "/library-data/v1.2.0/reviews-index.json",
-      "/library-data/v1.2.0/books/B001.json",
+      "/library-data/v1.3.0/guidance.json",
+      "/library-data/v1.3.0/reviews-index.json",
+      "/library-data/v1.3.0/books/B001.json",
     ]);
     // Closing a direct link stays on the Library.
     fireEvent.click(within(d).getByRole("button", { name: "Close" }));
@@ -390,11 +390,11 @@ describe("Library: book reviews", () => {
 
   it("lists the added books and loads each detail from its own file", async () => {
     open("/library/?view=reviews");
-    await screen.findByText("3,260 book review records · showing 24");
+    await screen.findByText("3,714 book review records · showing 24");
     const options = within(screen.getByRole("combobox", { name: "Book" }))
       .getAllByRole("option")
       .map((o) => o.textContent);
-    expect(options).toHaveLength(16);
+    expect(options).toHaveLength(20);
     expect(options).toEqual(
       expect.arrayContaining([
         "A Former Amish’s Survival Guide (239)",
@@ -405,9 +405,15 @@ describe("Library: book reviews", () => {
         "A Spec Ops Untraceable Communication Guide (159)",
         "A Syrian Survivor’s Civil War Guide (215)",
         "A Combat Doctor’s SHTF Medicine Guide (340)",
+        "A Green Beret’s BUG-Out Guide (163)",
+        "A Law Enforcement Officer’s Looter-Proof Home Guide (209)",
+        "An Army Officer’s Martial Law Survival Guide (39)",
+        "A NASA Engineer’s Underground Apocalypse Farm Guide (43)",
       ]),
     );
     for (const [entry, book] of [
+      ["B016-001", "B016"],
+      ["B017-001", "B017"],
       ["B008-001", "B008"],
       ["B009-001", "B009"],
       ["B010-033", "B010"],
@@ -422,9 +428,60 @@ describe("Library: book reviews", () => {
       open(`/library/?view=reviews&entry=${entry}`);
       await within(document.body).findByRole("list", { name: "Citations" });
       expect(requested().filter((u) => u.includes("/books/"))).toEqual([
-        `/library-data/v1.2.0/books/${book}.json`,
+        `/library-data/v1.3.0/books/${book}.json`,
       ]);
     }
+  });
+
+  it("opens B018 and B019 from the review index with their page offsets and warnings", async () => {
+    const openFromIndex = async (book: string, id: string) => {
+      cleanup();
+      clearLibraryCache();
+      fetchMock.mockClear();
+      open(`/library/?view=reviews&book=${book}`);
+      await screen.findByText(/book review records match/);
+      expect(requested().some((u) => u.includes("/books/"))).toBe(false);
+      // Later records are past the first page of 24 cards.
+      while (!cards().some((x) => x.dataset.entryId === id))
+        fireEvent.click(screen.getByRole("button", { name: /Show more/ }));
+      const card = cards().find((x) => x.dataset.entryId === id)!;
+      fireEvent.click(card.querySelector("button") ?? card);
+      expect(params().get("entry")).toBe(id);
+      const list = await within(document.body).findByRole("list", {
+        name: "Citations",
+      });
+      expect(requested().filter((u) => u.includes("/books/"))).toEqual([
+        `/library-data/v1.3.0/books/${book}.json`,
+      ]);
+      return list.textContent;
+    };
+    expect(await openFromIndex("B018", "B018-001")).toBe(
+      "Book p. unnumbered · PDF p. 1 · Military byline",
+    );
+    // B018: PDF page is printed page + 1.
+    expect(await openFromIndex("B018", "B018-038")).toBe(
+      "Book p. 62 · PDF p. 63 · Weapons, cover and engagement",
+    );
+    let d = dialog();
+    expect(d.textContent).toMatch(/Needs review — not approved instructions/);
+    expect(d.textContent).toMatch(/Operational details omitted/);
+    expect(
+      within(d).getByRole("list", { name: "Safety flags" }).textContent,
+    ).toMatch(/unsafe force risk/);
+    expect(await openFromIndex("B019", "B019-001")).toBe(
+      "Book p. unnumbered · PDF p. 1 · Cover and contents mismatch",
+    );
+    // B019: PDF page is printed page - 1.
+    expect(await openFromIndex("B019", "B019-008")).toBe(
+      "Book p. 16 · PDF p. 15 · Cherry tomato canning",
+    );
+    d = dialog();
+    expect(d.textContent).toMatch(/Needs review — not approved instructions/);
+    expect(d.textContent).toMatch(/tested process/);
+    expect(await openFromIndex("B019", "B019-042")).toBe(
+      "Book p. 53–54 · PDF p. 52–53 · Wild leek identification",
+    );
+    expect(dialog().textContent).toMatch(/False hellebore/);
   });
 
   it("keeps B009 front matter unnumbered and B010 printed/PDF pages apart", async () => {
@@ -605,7 +662,7 @@ describe("Library: book reviews", () => {
       return new Response(file(url), { status: 200 });
     };
     const b002 = JSON.parse(
-      file("/library-data/v1.2.0/reviews-index.json"),
+      file("/library-data/v1.3.0/reviews-index.json"),
     ).entries.find((e: { source_id: string }) => e.source_id === "B002");
     open(`/library/?view=reviews&entry=${b002.id}`);
     await within(document.body).findByText(/Loading the full review/);
@@ -653,7 +710,7 @@ describe("Library is read-only", () => {
     open("/library/?view=reviews&entry=B001-027");
     await within(document.body).findByText("Bleach treatment");
     expect(
-      requested().every((u) => u.startsWith("/library-data/v1.2.0/")),
+      requested().every((u) => u.startsWith("/library-data/v1.3.0/")),
     ).toBe(true);
     expect(window.localStorage.length).toBe(0);
   });

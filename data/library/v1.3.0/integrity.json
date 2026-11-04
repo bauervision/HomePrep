@@ -1,0 +1,468 @@
+{
+  "bundle_sha256": "ef1aa513dd985d104e171953e83b29fab13dc66952248e1896af824a4cb0a8ab",
+  "schema_sha256": "f324f529afe2748e8adb58a391e7df801e04bb81a6c2cac15a24cd2fa584f9d3",
+  "passed": true,
+  "packaged_on": "2026-11-04",
+  "checks": [
+    {
+      "check": "unique_ids_complete_references_and_safe_display_flags",
+      "passed": true
+    },
+    {
+      "check": "unique_source_evidence_correction_topic_ids",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/001-farmers-water-independence/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/001-farmers-water-independence/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B001",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B001",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/002-pioneers-self-sufficient/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/002-pioneers-self-sufficient/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B002",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B002",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/003-grandmas-food-preservation/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/003-grandmas-food-preservation/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B003",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B003",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/004-foragers-wild-food/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/004-foragers-wild-food/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B004",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B004",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/005-preppers-economic-depression/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/005-preppers-economic-depression/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B005",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B005",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/006-cyber-sabotage-cold-chains/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/006-cyber-sabotage-cold-chains/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B006",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B006",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/007-off-grid-diy-blackout/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/007-off-grid-diy-blackout/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B007",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B007",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/008-former-amish-survival/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/008-former-amish-survival/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B008",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B008",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/009-four-acre-self-sufficient-farm/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/009-four-acre-self-sufficient-farm/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B009",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B009",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/010-army-engineer-emp-proof-home/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/010-army-engineer-emp-proof-home/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B010",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B010",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/011-outlive-emp-early-pioneer/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/011-outlive-emp-early-pioneer/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B011",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B011",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/012-herbalist-natural-pharmacy/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/012-herbalist-natural-pharmacy/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B012",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B012",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/013-spec-ops-untraceable-communication/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/013-spec-ops-untraceable-communication/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B013",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B013",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/014-syrian-survivor-civil-war/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/014-syrian-survivor-civil-war/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B014",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B014",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/015-combat-doctor-medicine/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/015-combat-doctor-medicine/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B015",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B015",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/016-green-beret-bug-out/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/016-green-beret-bug-out/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B016",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B016",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/017-law-enforcement-looter-proof-home/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/017-law-enforcement-looter-proof-home/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B017",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B017",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/018-army-martial-law/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/018-army-martial-law/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B018",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B018",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:sources/019-underground-farm/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:sources/019-underground-farm/examination.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "exact_citations_dates_and_corrections:B019",
+      "passed": true
+    },
+    {
+      "check": "evidence_register_lossless:B019",
+      "passed": true
+    },
+    {
+      "check": "input_hash_unchanged:authoritative-core/core.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "lossless_original_records:authoritative-core/core.v1.0.0.json",
+      "passed": true
+    },
+    {
+      "check": "source_and_entry_counts",
+      "passed": true
+    },
+    {
+      "check": "classification_counts",
+      "passed": true
+    },
+    {
+      "check": "totals_match",
+      "passed": true
+    },
+    {
+      "check": "verified_principles_require_original_support",
+      "passed": true
+    },
+    {
+      "check": "correction_evidence_resolves",
+      "passed": true
+    },
+    {
+      "check": "historical_dates_retained",
+      "passed": true
+    },
+    {
+      "check": "no_implicit_household_actions",
+      "passed": true
+    },
+    {
+      "check": "guidance_default",
+      "passed": true
+    },
+    {
+      "check": "runtime_file_hashes",
+      "passed": true
+    },
+    {
+      "check": "runtime_guidance_exactly_matches",
+      "passed": true
+    },
+    {
+      "check": "runtime_index_no_original_claims_or_components",
+      "passed": true
+    },
+    {
+      "check": "runtime_index_lossless_projection",
+      "passed": true
+    },
+    {
+      "check": "runtime_book_details_exactly_match",
+      "passed": true
+    },
+    {
+      "check": "runtime_detail_paths_resolve",
+      "passed": true
+    },
+    {
+      "check": "old_entries_lossless_and_stable",
+      "passed": true
+    },
+    {
+      "check": "unchanged_core_cards",
+      "passed": true
+    },
+    {
+      "check": "content_versions_consistent",
+      "passed": true
+    },
+    {
+      "check": "previous_package_unchanged",
+      "passed": true
+    },
+    {
+      "check": "exact_added_books",
+      "passed": true
+    },
+    {
+      "check": "no_pdfs_in_runtime",
+      "passed": true
+    },
+    {
+      "check": "source_components_preserved_in_new_books",
+      "passed": true
+    },
+    {
+      "check": "topics_same_as_previous",
+      "passed": true
+    },
+    {
+      "check": "previous_book_order_stable",
+      "passed": true
+    },
+    {
+      "check": "twenty_one_runtime_payloads",
+      "passed": true
+    },
+    {
+      "check": "new_books_exact_counts",
+      "passed": true
+    },
+    {
+      "check": "medical_critical_record_not_promoted",
+      "passed": true
+    },
+    {
+      "check": "semantic_negative_controls",
+      "passed": true
+    }
+  ],
+  "negative_controls": [
+    {
+      "case": "automatic_action",
+      "rejected": true
+    },
+    {
+      "case": "mislabel_unverified",
+      "rejected": true
+    },
+    {
+      "case": "broken_evidence",
+      "rejected": true
+    }
+  ],
+  "totals": {
+    "total_entries": 3738,
+    "book_review_entries": 3714,
+    "authoritative_core_entries": 24,
+    "books": 19,
+    "book_classifications": {
+      "needs_review": 2058,
+      "source_derived_reference": 1496,
+      "verified_guidance": 160
+    },
+    "topics": 11,
+    "evidence_records": 440,
+    "corrections": 419
+  },
+  "limitations": [
+    "Adapter checks do not re-verify source claims or test the not-yet-implemented app UI.",
+    "Runtime projections are checked against the canonical bundle; the canonical bundle has separate Draft 7 validation."
+  ]
+}

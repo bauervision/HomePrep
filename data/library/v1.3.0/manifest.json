@@ -1,0 +1,246 @@
+{
+  "manifest_version": "1.0.0",
+  "bundle_version": "1.3.0",
+  "packaged_on": "2026-11-04",
+  "files": [
+    {
+      "path": "library.bundle.json",
+      "bytes": 20723674,
+      "sha256": "ef1aa513dd985d104e171953e83b29fab13dc66952248e1896af824a4cb0a8ab"
+    },
+    {
+      "path": "library.schema.json",
+      "bytes": 10177,
+      "sha256": "f324f529afe2748e8adb58a391e7df801e04bb81a6c2cac15a24cd2fa584f9d3"
+    },
+    {
+      "path": "runtime/books/B001.json",
+      "bytes": 699844,
+      "sha256": "ecae3fbe9f6c37cd696da9b88571bd2248e131d6f36a6ed3ecb86ad366669bba"
+    },
+    {
+      "path": "runtime/books/B002.json",
+      "bytes": 1159869,
+      "sha256": "5da21669c05677e5e2ace80607c6181fc8c063891ae3ebc33f839493ba5b6a66"
+    },
+    {
+      "path": "runtime/books/B003.json",
+      "bytes": 552971,
+      "sha256": "deaf74231cd70a138a24cf2650e0294053570586281e83b095d5147d2397907e"
+    },
+    {
+      "path": "runtime/books/B004.json",
+      "bytes": 957465,
+      "sha256": "57d33a81784bc6d88aa9b6187c4de0392c815a5356a49a636811a8b5357ea65c"
+    },
+    {
+      "path": "runtime/books/B005.json",
+      "bytes": 1064189,
+      "sha256": "1cbf3af1271b2ac67b6a2e08ea1ebfb0a74abd65564fdfb7a405618daa0e01d0"
+    },
+    {
+      "path": "runtime/books/B006.json",
+      "bytes": 208710,
+      "sha256": "318885d9fd4e74a560cf064c17e86ce1df65ba29bcc3ae3afacd700d447730e1"
+    },
+    {
+      "path": "runtime/books/B007.json",
+      "bytes": 1052311,
+      "sha256": "7c69cd0377b1273a289c204e90ccfc1c3a05391b630e36104854fa9973932922"
+    },
+    {
+      "path": "runtime/books/B008.json",
+      "bytes": 931867,
+      "sha256": "ba14e2d7f630c9d307fc0d30693f55da5a3c44e8cca9789afc398e123e1dfe9c"
+    },
+    {
+      "path": "runtime/books/B009.json",
+      "bytes": 573387,
+      "sha256": "5b712d1a5943ee206d944c8d2ea72f5172f0774831f5417d5f7e4ef3d080aab6"
+    },
+    {
+      "path": "runtime/books/B010.json",
+      "bytes": 829489,
+      "sha256": "6af48bd07ff1f314ac725899ab45b0a988befc9c6ebbb79461b2265af5ab98e0"
+    },
+    {
+      "path": "runtime/books/B011.json",
+      "bytes": 586431,
+      "sha256": "36254aa8a14e6d40d58d7c042af4cac75907589775d073f1c9d2a2a2f4f1b6cd"
+    },
+    {
+      "path": "runtime/books/B012.json",
+      "bytes": 1251899,
+      "sha256": "4baf3bc9dbcd7d33a3218feb7484358104d1e41ebffff8442195f9e2d0b5ec52"
+    },
+    {
+      "path": "runtime/books/B013.json",
+      "bytes": 695034,
+      "sha256": "a949aed8a7f4178e2d9ad9424ade1d8e94ffe430c2b101fa92a749e97dc2e4ba"
+    },
+    {
+      "path": "runtime/books/B014.json",
+      "bytes": 863159,
+      "sha256": "36382ab430f356d4917fdcbf7ab568a2727788213d12c6b0911aff39fd0ad384"
+    },
+    {
+      "path": "runtime/books/B015.json",
+      "bytes": 1720121,
+      "sha256": "4be6b07755a9d02088b71c0943280986df2351e871079b74062e8315d8bea938"
+    },
+    {
+      "path": "runtime/books/B016.json",
+      "bytes": 609268,
+      "sha256": "dac003fd379501c3a5b108ea522e3a23d78dab496f62e4001e00376256d10d95"
+    },
+    {
+      "path": "runtime/books/B017.json",
+      "bytes": 784307,
+      "sha256": "ad144b505345db2381fc6ef2f9b53dbd7a01f0f91e53d6f07ddcdb3ca2dfb4f8"
+    },
+    {
+      "path": "runtime/books/B018.json",
+      "bytes": 116478,
+      "sha256": "beaef34595b17a946d2b599ac10c912e8d39b42e6849d30d908ee3f77e9ac993"
+    },
+    {
+      "path": "runtime/books/B019.json",
+      "bytes": 133610,
+      "sha256": "f31af115760b5052c274da9d67e154a2ee34817e684a5eb496c24992f6092055"
+    },
+    {
+      "path": "runtime/guidance.json",
+      "bytes": 92927,
+      "sha256": "045e9a5ec076d6040637bf6e7ba7a2527d51798e703dfdefcfd07d8ebc332572"
+    },
+    {
+      "path": "runtime/reviews-index.json",
+      "bytes": 5985648,
+      "sha256": "70784802da638cf2794072fc7455ad5e2bfd8711af477441bafe2a711333e22f"
+    }
+  ],
+  "inputs": [
+    {
+      "path": "sources/001-farmers-water-independence/examination.v1.0.0.json",
+      "sha256": "4a772e63964b7a63f4e61fef2ec94b401f704f369bb592cc54d3c40a417ded69"
+    },
+    {
+      "path": "sources/002-pioneers-self-sufficient/examination.v1.0.0.json",
+      "sha256": "c44c518404841e36aa629b36c8d7b5ad6c260cd6787b2cdfa51c7e9c1f011c49"
+    },
+    {
+      "path": "sources/003-grandmas-food-preservation/examination.v1.0.0.json",
+      "sha256": "5d1aa4504fa99f013660ac4c77e57d4166e04462038b507f8112e4c3ba38eea2"
+    },
+    {
+      "path": "sources/004-foragers-wild-food/examination.v1.0.0.json",
+      "sha256": "370fbe74b59ef768ab86a3339160f9881980717e0f011d3dae5b38fc8db9219d"
+    },
+    {
+      "path": "sources/005-preppers-economic-depression/examination.v1.0.0.json",
+      "sha256": "228b4a26e752310ee019463d5dc918dadd8b4fd08215e564a03e5b9c90a21c33"
+    },
+    {
+      "path": "sources/006-cyber-sabotage-cold-chains/examination.v1.0.0.json",
+      "sha256": "ab6466ab6b3ca7f39f901525a8548a46b9db75f5dd53ffa63d99676453b19a19"
+    },
+    {
+      "path": "sources/007-off-grid-diy-blackout/examination.v1.0.0.json",
+      "sha256": "556a7681520ca155c2751ae78fb2a7663b75697542c2daa69f7a16078abf5bb7"
+    },
+    {
+      "path": "sources/008-former-amish-survival/examination.v1.0.0.json",
+      "sha256": "d19c65cb51c5cd68a1d94a7b3318e562d43ef0283d49639b7553d18efbaa69de"
+    },
+    {
+      "path": "sources/009-four-acre-self-sufficient-farm/examination.v1.0.0.json",
+      "sha256": "12f8a0e371789ee3c77a89b45bd16a5ba7000bf313f06bb7677eb269518224e8"
+    },
+    {
+      "path": "sources/010-army-engineer-emp-proof-home/examination.v1.0.0.json",
+      "sha256": "de0726f675b748868db566c040146c2f8f2436359bd146aadf1b66c2418e0a66"
+    },
+    {
+      "path": "sources/011-outlive-emp-early-pioneer/examination.v1.0.0.json",
+      "sha256": "d5e10e7c1511b494a2b4ed62c338142eb07674cc253c75153aed453312cd8b75"
+    },
+    {
+      "path": "sources/012-herbalist-natural-pharmacy/examination.v1.0.0.json",
+      "sha256": "e05364437a53bf24e6c610b42335df2bae3bc7b61207d5f3963f37eaa4a182a5"
+    },
+    {
+      "path": "sources/013-spec-ops-untraceable-communication/examination.v1.0.0.json",
+      "sha256": "810c7e1105e5e49e3f8e8da2cdb667e97f2243cef5ab0e6d1d23c312a49aace4"
+    },
+    {
+      "path": "sources/014-syrian-survivor-civil-war/examination.v1.0.0.json",
+      "sha256": "a4d2a289b9819fd6a635d2f03ef5396787395774a580fb70968abb984933ecc4"
+    },
+    {
+      "path": "sources/015-combat-doctor-medicine/examination.v1.0.0.json",
+      "sha256": "216606dd9bf2bafa99518790265738e1ecf0795979ab1882ea850ee46c1bc364"
+    },
+    {
+      "path": "sources/016-green-beret-bug-out/examination.v1.0.0.json",
+      "sha256": "a5ea3cad06b3d8c415ead07d68de13293a16b61514d11721b35224a2c878f2a1"
+    },
+    {
+      "path": "sources/017-law-enforcement-looter-proof-home/examination.v1.0.0.json",
+      "sha256": "ef47b2837a49ef32529784f187aeaf98266cb131ceb79dc1778418565acbc2de"
+    },
+    {
+      "path": "sources/018-army-martial-law/examination.v1.0.0.json",
+      "sha256": "54395eb4b3249d248239152b0b27ec158afb79998a9818b4b2860790859ebbb8"
+    },
+    {
+      "path": "sources/019-underground-farm/examination.v1.0.0.json",
+      "sha256": "268455ff4c8490bead777103439adf59c0721f422250608ab5accb9552daeb3c"
+    },
+    {
+      "path": "authoritative-core/core.v1.0.0.json",
+      "sha256": "df03781dcf1737c4e265bd65bc452db0ba6ca0c1353eb58d043a64ea530eff3f"
+    }
+  ],
+  "totals": {
+    "total_entries": 3738,
+    "book_review_entries": 3714,
+    "authoritative_core_entries": 24,
+    "books": 19,
+    "book_classifications": {
+      "needs_review": 2058,
+      "source_derived_reference": 1496,
+      "verified_guidance": 160
+    },
+    "topics": 11,
+    "evidence_records": 440,
+    "corrections": 419
+  },
+  "defaults": {
+    "collection": "authoritative_core",
+    "topic": "all",
+    "query": "",
+    "book": "all",
+    "classification": "all"
+  },
+  "labels": {
+    "authority_supported": "Authority-supported guidance",
+    "verified_principle": "Verified principle — limited scope",
+    "source_reference": "Source reference — not independently verified",
+    "needs_review": "Needs review — not approved instructions"
+  },
+  "limitations": [
+    "This is a display adapter, not a new source verification or merging of conflicting procedures.",
+    "Exact book records and core cards are preserved under source_record.",
+    "Private PDFs are not included. Do not publish PDF archives.",
+    "Guidance is a five-person example; do not overwrite the signed-in household profile.",
+    "No service-worker/offline cold-launch capability has been established by this pack.",
+    "Reading, bookmarking or searching never completes a goal, task or readiness requirement."
+  ],
+  "runtime_loading": {
+    "base_path": "/library-data/v1.3.0/",
+    "initial": "runtime/guidance.json",
+    "research_index": "runtime/reviews-index.json",
+    "book_detail_pattern": "runtime/books/{source_id}.json",
+    "note": "Publish the runtime directory contents under the base path. Thus initial HTTP URL is /library-data/v1.3.0/guidance.json, index is reviews-index.json and detail_path resolves relative to that same base. Canonical bundle and schema are development inputs, not landing-page downloads."
+  }
+}
