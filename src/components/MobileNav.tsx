@@ -123,7 +123,7 @@ export function MobileNav({
         }}
         className={cx(
           // Below the sticky header (z-20), above page content.
-          "fixed inset-0 z-10 bg-black/60 transition-opacity duration-200 ease-out motion-reduce:transition-none lg:hidden",
+          "fixed inset-0 z-10 bg-black/60 transition-opacity duration-200 ease-out motion-reduce:transition-none xl:hidden",
           open ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       />,

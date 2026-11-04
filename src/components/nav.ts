@@ -6,6 +6,7 @@ import {
   NotebookText,
   Package,
   ShoppingCart,
+  Target,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -19,6 +20,7 @@ export interface NavItem {
 /** Primary destinations. "Budget" keeps the /purchases route for compatibility. */
 export const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/goals/", label: "Goals", icon: Target },
   { href: "/inventory/", label: "Inventory", icon: Package },
   { href: "/tasks/", label: "Tasks", icon: ListChecks },
   { href: "/purchases/", label: "Budget", icon: ShoppingCart },

@@ -6,6 +6,7 @@ describe("navigation config", () => {
     const labels = NAV.map((n) => n.label);
     expect(labels).toEqual([
       "Dashboard",
+      "Goals",
       "Inventory",
       "Tasks",
       "Budget",
@@ -23,6 +24,8 @@ describe("navigation config", () => {
   });
 
   it("matches routes with or without a trailing slash", () => {
+    expect(currentNav("/goals")?.label).toBe("Goals");
+    expect(currentNav("/goals/")?.href).toBe("/goals/");
     expect(isActive("/", "/")).toBe(true);
     expect(isActive("/inventory", "/inventory/")).toBe(true);
     expect(isActive("/inventory/", "/tasks/")).toBe(false);

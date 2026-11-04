@@ -38,6 +38,25 @@ const trigger = () =>
   screen.getByRole("button", { name: /menu, current page/i });
 
 describe("MobileNav", () => {
+  it.each([false, true])(
+    "restores the active Goals destination for admin=%s",
+    (admin) => {
+      render(
+        <MobileNav
+          pathname="/goals/"
+          items={navFor(admin)}
+          onSignOut={() => {}}
+        />,
+      );
+      fireEvent.click(trigger());
+      const nav = screen.getByRole("navigation", { name: "Main" });
+      const goals = within(nav).getByRole("link", { name: "Goals" });
+      expect(goals.getAttribute("href")).toBe("/goals/");
+      expect(goals.getAttribute("aria-current")).toBe("page");
+      expect(document.activeElement).toBe(goals);
+      expect(!!within(nav).queryByRole("link", { name: "Admin" })).toBe(admin);
+    },
+  );
   it("shows the current page and starts closed", () => {
     render(<MobileNav pathname="/purchases/" onSignOut={() => {}} />);
     expect(trigger()).toHaveProperty(
@@ -57,6 +76,7 @@ describe("MobileNav", () => {
     const links = within(nav).getAllByRole("link");
     expect(links.map((l) => l.textContent)).toEqual([
       "Dashboard",
+      "Goals",
       "Inventory",
       "Tasks",
       "Budget",
@@ -153,7 +173,7 @@ describe("MobileNav", () => {
     const nav = screen.getByRole("navigation");
     expect(document.activeElement?.textContent).toBe("Dashboard");
     fireEvent.keyDown(nav, { key: "ArrowDown" });
-    expect(document.activeElement?.textContent).toBe("Inventory");
+    expect(document.activeElement?.textContent).toBe("Goals");
     fireEvent.keyDown(nav, { key: "End" });
     expect(document.activeElement?.textContent).toBe("Sign out");
     fireEvent.keyDown(nav, { key: "ArrowDown" });

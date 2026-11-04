@@ -218,7 +218,7 @@ export function TopBar() {
   const items = navFor(!!admin);
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-[#040b11]/80 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:gap-5 sm:px-5 lg:gap-3 xl:gap-5">
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-3 sm:gap-5 sm:px-5 xl:gap-3">
         <Link
           href="/"
           className="shrink-0 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-amber"
@@ -228,7 +228,7 @@ export function TopBar() {
         </Link>
         <nav
           aria-label="Main"
-          className="hidden min-w-0 flex-1 gap-0.5 lg:flex"
+          className="hidden min-w-0 flex-1 gap-0.5 xl:flex"
         >
           {items.map(({ href, label, icon: Icon }) => {
             const active = isActive(pathname, href);
@@ -238,8 +238,8 @@ export function TopBar() {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cx(
-                  // Tighter between lg and xl so every destination fits.
-                  "relative flex items-center gap-1.5 rounded-md px-1.5 py-2 text-sm whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-amber xl:px-2.5",
+                  // Keep every destination visible when the full navbar is shown.
+                  "relative flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-2 text-sm whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-amber",
                   active ? "text-ivory" : "text-sage hover:text-ivory",
                 )}
               >
@@ -256,8 +256,8 @@ export function TopBar() {
             );
           })}
         </nav>
-        <span className="flex-1 lg:hidden" />
-        <span className="hidden max-w-40 truncate text-xs text-slate xl:inline">
+        <span className="flex-1 xl:hidden" />
+        <span className="hidden max-w-24 truncate text-xs text-slate 2xl:inline">
           {state.household.name}
         </span>
         <QuickNote />
@@ -266,11 +266,11 @@ export function TopBar() {
           size="sm"
           onClick={signOut}
           title={state.user.email ?? ""}
-          className="hidden lg:inline-flex"
+          className="hidden xl:inline-flex"
         >
           Sign out
         </Button>
-        <div className="lg:hidden">
+        <div className="xl:hidden">
           <MobileNav
             pathname={pathname}
             onSignOut={signOut}
