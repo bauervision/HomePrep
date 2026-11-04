@@ -1,391 +1,187 @@
 /*
- * Integrity of the imported Library pack (v1.3.0) against its manifest and
- * the canonical bundle kept as a development fixture in data/library/. The
- * previous v1.0.0, v1.1.0 and v1.2.0 packs stay in place and must be preserved
- * record-for-record.
+ * Integrity of the published Library payload (content 1.4.0) and of the
+ * private research archive.
+ *
+ * - Guidance is the only published Library file. Every content version keeps
+ *   its guidance.json public; book-review indexes and detail files from every
+ *   version live privately under data/library/v*\/runtime/ and are not served.
+ * - 1.4.0 = the 24 unchanged core cards plus the reviewed Shelter cards, built
+ *   by scripts/build-library-content.mjs and checked against its manifest.
  */
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseBookDetail, parseGuidance, parseReviewsIndex } from "./validate";
-
-const VERSION = "1.3.0";
-const PUBLIC = `public/library-data/v${VERSION}/`;
-const FIXTURES = `data/library/v${VERSION}/`;
-/** Earlier packs, oldest first, with their manifest file counts. */
-const PREVIOUS = [
-  { version: "1.0.0", files: 11 },
-  { version: "1.1.0", files: 14 },
-  { version: "1.2.0", files: 19 },
-];
+import { LIBRARY_VERSION } from "./types";
+import { parseGuidance } from "./validate";
 
 type Raw = Record<string, unknown> & { id: string };
-type Book = { entries: Raw[]; evidence: Raw[]; corrections: Raw[] };
+type ManifestFile = { path: string; bytes: number; sha256: string };
 const read = (p: string) => readFileSync(p);
 const json = (p: string) => JSON.parse(read(p).toString("utf8"));
+const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 const pub = (v: string) => `public/library-data/v${v}/`;
-const fixtures = (v: string) => `data/library/v${v}/`;
+const priv = (v: string) => `data/library/v${v}/`;
 
-const manifest = json(`${FIXTURES}manifest.json`);
-const bundle = json(`${FIXTURES}library.bundle.json`);
-const guidance = json(`${PUBLIC}guidance.json`);
-const index = json(`${PUBLIC}reviews-index.json`);
-const books: Record<string, Book> = Object.fromEntries(
-  index.sources.map((s: Raw) => [s.id, json(`${PUBLIC}books/${s.id}.json`)]),
-);
-const canonical = new Map<string, Raw>(
-  bundle.entries.map((e: Raw) => [e.id, e]),
-);
-const entry = (id: string) =>
-  books[id.slice(0, 4)].entries.find((x) => x.id === id)!;
-const cite = (id: string) =>
-  (entry(id).source_citations as Record<string, unknown>[])[0];
+/** Archived research packs, with manifest sizes and review counts. */
+const ARCHIVE = [
+  { version: "1.0.0", files: 11, reviews: 1466, books: 7 },
+  { version: "1.1.0", files: 14, reviews: 2122, books: 10 },
+  { version: "1.2.0", files: 19, reviews: 3260, books: 15 },
+  { version: "1.3.0", files: 23, reviews: 3714, books: 19 },
+];
 
-function expectManifestHashes(version: string, files: number) {
-  const m = json(`${fixtures(version)}manifest.json`);
-  expect(m.bundle_version).toBe(version);
-  expect(m.files).toHaveLength(files);
-  for (const f of m.files as {
-    path: string;
-    bytes: number;
-    sha256: string;
-  }[]) {
-    const p = f.path.startsWith("runtime/")
-      ? `${pub(version)}${f.path.slice("runtime/".length)}`
-      : `${fixtures(version)}${f.path}`;
+/** Where a manifest path lives now: guidance public, the rest private. */
+const located = (v: string, path: string) =>
+  path === "runtime/guidance.json" ? `${pub(v)}guidance.json` : priv(v) + path;
+
+function expectManifest(v: string, count: number) {
+  const m = json(`${priv(v)}manifest.json`);
+  expect(m.bundle_version).toBe(v);
+  expect(m.files).toHaveLength(count);
+  for (const f of m.files as ManifestFile[]) {
+    const p = located(v, f.path);
     const bytes = read(p);
     expect(bytes.length, p).toBe(f.bytes);
-    expect(createHash("sha256").update(bytes).digest("hex"), p).toBe(f.sha256);
+    expect(sha(bytes), p).toBe(f.sha256);
   }
 }
 
-describe(`Library pack v${VERSION}`, () => {
-  it("matches the manifest's sizes and SHA-256 hashes", () => {
-    expectManifestHashes(VERSION, 23);
+function walk(dir: string): string[] {
+  return readdirSync(dir).flatMap((n) => {
+    const p = join(dir, n);
+    return statSync(p).isDirectory() ? walk(p) : [p.replace(/\\/g, "/")];
   });
+}
 
-  it("keeps the canonical totals and the 24 / 3,714 runtime split", () => {
-    expect(bundle.entries).toHaveLength(3738);
-    expect(bundle.totals).toEqual(manifest.totals);
-    expect(guidance.content_version).toBe(VERSION);
-    expect(index.content_version).toBe(VERSION);
-    expect(guidance.entries).toHaveLength(24);
-    expect(index.entries).toHaveLength(3714);
-    const ids = [...guidance.entries, ...index.entries].map((e: Raw) => e.id);
-    expect(new Set(ids).size).toBe(3738);
-    expect(ids.every((id) => canonical.has(id))).toBe(true);
-    const counts: Record<string, number> = {};
-    for (const e of index.entries)
-      counts[e.classification] = (counts[e.classification] ?? 0) + 1;
-    expect(counts).toEqual({
-      verified_guidance: 160,
-      source_derived_reference: 1496,
-      needs_review: 2058,
-    });
-    expect(guidance.topics).toHaveLength(11);
-    expect(bundle.evidence).toHaveLength(440);
-    expect(bundle.corrections).toHaveLength(419);
-  });
+const guidance = json(`${pub(LIBRARY_VERSION)}guidance.json`);
+const previous = json(`${pub("1.3.0")}guidance.json`);
+const shelter = json(`${priv(LIBRARY_VERSION)}shelter-cards.json`);
 
-  it("resolves all nineteen book detail files from the index", () => {
-    expect(Object.keys(books).sort()).toEqual(
-      Array.from(
-        { length: 19 },
-        (_, i) => `B${String(i + 1).padStart(3, "0")}`,
-      ),
+describe(`Library content ${LIBRARY_VERSION}`, () => {
+  it("matches its manifest and is rebuilt exactly by the build script", () => {
+    expect(LIBRARY_VERSION).toBe("1.4.0");
+    expectManifest(LIBRARY_VERSION, 1);
+    const out = execFileSync(
+      process.execPath,
+      ["scripts/build-library-content.mjs", "--check"],
+      { encoding: "utf8" },
     );
-    const perBook: Record<string, number> = {};
-    for (const e of index.entries) {
-      expect(e.detail_path).toBe(`books/${e.source_id}.json`);
-      expect(existsSync(`${PUBLIC}${e.detail_path}`)).toBe(true);
-      expect(books[e.source_id].entries.some((b) => b.id === e.id)).toBe(true);
-      perBook[e.source_id] = (perBook[e.source_id] ?? 0) + 1;
-    }
-    expect(perBook).toMatchObject({
-      B011: 159,
-      B012: 265,
-      B013: 159,
-      B014: 215,
-      B015: 340,
-      B016: 163,
-      B017: 209,
-      B018: 39,
-      B019: 43,
-    });
+    expect(out).toMatch(/up to date/);
   });
 
-  it("projects records losslessly from the canonical bundle", () => {
-    // Core cards and full book records are identical to the bundle.
-    for (const e of guidance.entries) expect(e).toEqual(canonical.get(e.id));
-    let detailCount = 0;
-    for (const b of Object.values(books))
-      for (const e of b.entries) {
-        detailCount++;
-        expect(e).toEqual(canonical.get(e.id));
+  it("keeps the 24 core cards and evidence identical, then adds Shelter", () => {
+    expect(guidance.content_version).toBe("1.4.0");
+    expect(guidance.entries.slice(0, 24)).toEqual(previous.entries);
+    expect(guidance.evidence.slice(0, previous.evidence.length)).toEqual(
+      previous.evidence,
+    );
+    const added = guidance.entries.slice(24);
+    expect(added.map((e: Raw) => e.id)).toEqual(["HP-H01", "HP-H02", "HP-H03"]);
+    expect(
+      added.every((e: Raw) => (e.topic_ids as string[]).join() === "shelter"),
+    ).toBe(true);
+    // Topic groups: the earlier eleven, plus Shelter after Communications.
+    const ids = guidance.topics.map((t: Raw) => t.id);
+    expect(ids).toEqual([
+      ...previous.topics.slice(0, 5).map((t: Raw) => t.id),
+      "shelter",
+      ...previous.topics.slice(5).map((t: Raw) => t.id),
+    ]);
+    expect(guidance.topics.filter((t: Raw) => t.id !== "shelter")).toEqual(
+      previous.topics,
+    );
+  });
+
+  it("keeps each Shelter card's reviewed sources, dates and limits", () => {
+    const evidence = new Map<string, Raw>(
+      guidance.evidence.map((e: Raw) => [e.id, e]),
+    );
+    for (const card of shelter.cards as Raw[]) {
+      const e = guidance.entries.find((x: Raw) => x.id === card.id);
+      expect(e.reviewed_on).toBe("2026-11-04");
+      expect(e.source_record.steps).toEqual(card.steps);
+      expect(e.source_record.limits).toEqual(card.limits);
+      expect(e.source_record.limits.length).toBeGreaterThan(0);
+      expect(e.evidence.length).toBeGreaterThan(0);
+      for (const ref of e.evidence) {
+        const rec = evidence.get(ref.evidence_id) as unknown as {
+          record: Record<string, string>;
+        };
+        expect(rec, ref.evidence_id).toBeTruthy();
+        expect(rec.record.url).toMatch(/^https:\/\/www\.ready\.gov\//);
+        expect(rec.record.url).toBe(ref.url);
+        expect(rec.record.accessed_on).toBe("2026-11-04");
+        expect(rec.record.page_last_updated).toMatch(/^2026-\d\d-\d\d$/);
       }
-    expect(detailCount).toBe(3714);
-    // The index is the same record without original claims and components.
-    for (const e of index.entries) {
-      const { detail_path, ...rest } = e;
-      const { source_record, ...expected } = canonical.get(e.id)!;
-      expect(detail_path).toBeTruthy();
-      expect(source_record).toBeTruthy();
-      expect(rest).toEqual(expected);
-      expect(JSON.stringify(e)).not.toContain("original_claim");
-      expect(JSON.stringify(e)).not.toContain("source_components");
     }
-    // Every evidence record and correction is present, namespaced.
-    const evidence = [
-      ...guidance.evidence,
-      ...Object.values(books).flatMap((b) => b.evidence),
-    ];
-    const corrections = Object.values(books).flatMap((b) => b.corrections);
-    expect(evidence).toHaveLength(440);
-    expect(corrections).toHaveLength(419);
-    expect(new Set(evidence.map((e) => e.id)).size).toBe(440);
-    expect(evidence).toEqual(expect.arrayContaining(bundle.evidence));
-    expect(corrections).toEqual(expect.arrayContaining(bundle.corrections));
+    // Hazard-specific: tornado and flood advice are kept apart.
+    const h01 = guidance.entries.find((x: Raw) => x.id === "HP-H01");
+    expect(h01.source_record.steps[0]).toMatch(/^Tornado/);
+    expect(h01.source_record.steps[1]).toMatch(/^Flood/);
   });
 
-  it("keeps the canonical bundle out of the public folder", () => {
-    for (const v of [...PREVIOUS.map((p) => p.version), VERSION]) {
-      expect(existsSync(`${pub(v)}library.bundle.json`)).toBe(false);
-      expect(existsSync(`${pub(v)}library.schema.json`)).toBe(false);
-      expect(existsSync(`${pub(v)}manifest.json`)).toBe(false);
-    }
-  });
-
-  it("allows no action, execution or readiness credit on any entry", () => {
-    for (const e of bundle.entries) {
+  it("allows no action, execution or readiness credit on any card", () => {
+    for (const e of guidance.entries) {
       expect(e.execution_eligible).toBe(false);
       expect(e.automatic_execution_allowed).toBe(false);
       expect(e.readiness_credit).toBe("none");
+      expect(e.source_record.automatic_execution_allowed).toBe(false);
     }
+    expect(guidance.policy.book_reviews).toBe(
+      "private_research_archive_not_published",
+    );
   });
 
-  it("keeps B010's armed-retaking passage as a high-level reference only", () => {
-    const e = entry("B010-076");
-    expect(e.title).toBe("Armed retaking and harassment proposal");
-    expect(e.classification).toBe("needs_review");
-    const sr = e.source_record as Record<string, unknown>;
-    expect(sr.source_components ?? []).toEqual([]);
-  });
-
-  it("keeps unnumbered printed pages separate from PDF pages", () => {
-    // B009 front matter is unnumbered; so is B010's cover.
-    expect(cite("B009-002")).toMatchObject({
-      book_page_start: null,
-      book_page_end: null,
-      pdf_page_start: 2,
-      pdf_page_end: 4,
-    });
-    expect(cite("B010-033")).toMatchObject({
-      book_page_start: 20,
-      pdf_page_start: 21,
-    });
-    // B014: unnumbered cover, then printed = PDF - 1 through the Final Word.
-    expect(cite("B014-001")).toMatchObject({
-      book_page_start: null,
-      book_page_end: 1,
-      pdf_page_start: 1,
-      pdf_page_end: 2,
-    });
-    expect(cite("B014-215")).toMatchObject({
-      book_page_start: 51,
-      book_page_end: 51,
-      pdf_page_start: 52,
-      pdf_page_end: 52,
-    });
-    // B015: unnumbered cover, then printed page = PDF page (no minus-one).
-    expect(cite("B015-001")).toMatchObject({
-      book_page_start: null,
-      book_page_end: 2,
-      pdf_page_start: 1,
-      pdf_page_end: 2,
-    });
-    for (const e of books.B015.entries.slice(1))
-      for (const c of e.source_citations as Record<string, number>[]) {
-        expect(c.book_page_start, e.id).toBe(c.pdf_page_start);
-        expect(c.book_page_end, e.id).toBe(c.pdf_page_end);
-      }
-  });
-
-  it("keeps editorial chapter containers labelled as the source has them", () => {
-    const chapter = (book: string, id: string) =>
-      index.sources
-        .find((s: Raw) => s.id === book)
-        .chapters.find((c: Raw) => c.id === id);
-    // Both final B015 headings say Chapter 20; CH21 is editorial only.
-    expect(chapter("B015", "CH20").title).toMatch(/source Chapter20\(first\)/);
-    expect(chapter("B015", "CH21").title).toMatch(/source Chapter20\(second\)/);
-    expect(chapter("B014", "CH11").title).toMatch(/Final Word — unnumbered/);
-  });
-
-  it("keeps B015's conflicting tourniquet records and unsafe ORS record apart", () => {
-    const p58 = entry("B015-192");
-    const p92 = entry("B015-289");
-    expect(p58.title).toBe("Loosen tourniquet every ten minutes");
-    expect(p58.classification).toBe("needs_review");
-    expect(p58.safety_flags).toContain("unsafe_tourniquet_release");
-    expect(cite("B015-192")).toMatchObject({ book_page_start: 58 });
-    expect(p92.title).toBe("Later tourniquet instruction:do not remove");
-    expect(p92.classification).toBe("verified_guidance");
-    expect(cite("B015-289")).toMatchObject({ book_page_start: 92 });
-    const ors = entry("B015-276");
-    expect(ors.classification).toBe("needs_review");
-    expect(ors.safety_flags).toContain("unsafe_rehydration_recipe");
-  });
-
-  it("keeps B013's printed frequency error with its correction", () => {
-    const e = entry("B013-140");
-    expect(e.title).toBe("Frequency table: FRS 3");
-    expect(e.correction_ids).toEqual(["B013:C05"]);
-    const c = books.B013.corrections.find((x) => x.id === "B013:C05")!;
-    expect(JSON.stringify(c)).toMatch(/462\.6215MHz as the book’s error/);
-    expect(JSON.stringify(c)).toMatch(/462\.6125MHz/);
-  });
-
-  it("keeps B018 and B019 covers unnumbered with their opposite page offsets", () => {
-    for (const id of ["B018-001", "B019-001"])
-      expect(cite(id)).toMatchObject({
-        book_page_start: null,
-        book_page_end: null,
-        pdf_page_start: 1,
-        pdf_page_end: 1,
-      });
-    // B018: PDF 2 is printed page 1. B019: PDF 2 is printed page 3.
-    const offset = { B018: 1, B019: -1 } as const;
-    for (const [book, diff] of Object.entries(offset))
-      for (const e of books[book].entries)
-        for (const c of e.source_citations as Record<string, number | null>[]) {
-          if (c.book_page_start === null) continue;
-          expect(c.pdf_page_start! - c.book_page_start, e.id).toBe(diff);
-          expect(c.pdf_page_end! - c.book_page_end!, e.id).toBe(diff);
-        }
-  });
-
-  it("keeps B018 tactical and B019 canning and wild-plant claims under review", () => {
-    for (const id of ["B018-014", "B018-036", "B018-037", "B018-038"]) {
-      const e = entry(id);
-      expect(e.classification, id).toBe("needs_review");
-      expect(e.safety_flags, id).toContain("unsafe_force_risk");
-      expect(e.correction_ids, id).not.toHaveLength(0);
-    }
-    for (const id of ["B019-008", "B019-019", "B019-023", "B019-042"]) {
-      const e = entry(id);
-      expect(e.classification, id).toBe("needs_review");
-      expect(e.safety_flags, id).toContain("food_safety");
-      expect(e.correction_ids, id).not.toHaveLength(0);
-    }
+  it("parses as 27 authority-supported cards with nothing rejected", () => {
+    const g = parseGuidance(guidance);
+    expect(g.entries).toHaveLength(27);
+    expect(g.rejected).toBe(0);
   });
 });
 
-describe.each(PREVIOUS)("Preservation of the v$version pack", (prev) => {
-  const p = pub(prev.version);
-  const prevIndex = json(`${p}reviews-index.json`);
-  const prevGuidance = json(`${p}guidance.json`);
-  const prevBundle = json(`${fixtures(prev.version)}library.bundle.json`);
+describe("Private research archive", () => {
+  it.each(ARCHIVE)(
+    "keeps the v$version pack byte-identical to its manifest",
+    ({ version, files }) => expectManifest(version, files),
+  );
 
-  it("leaves the previous versioned files byte-identical to their manifest", () => {
-    expectManifestHashes(prev.version, prev.files);
+  it.each(ARCHIVE)(
+    "keeps all v$version book examinations privately",
+    ({ version, reviews, books }) => {
+      const index = json(`${priv(version)}runtime/reviews-index.json`);
+      expect(index.entries).toHaveLength(reviews);
+      expect(index.sources).toHaveLength(books);
+      for (const s of index.sources as Raw[])
+        expect(existsSync(`${priv(version)}runtime/books/${s.id}.json`)).toBe(
+          true,
+        );
+    },
+  );
+
+  it("still holds all 19 book examinations", () => {
+    const books = readdirSync(`${priv("1.3.0")}runtime/books`);
+    expect(books).toHaveLength(19);
   });
+});
 
-  it("keeps every previous record identical and in order, with new ones appended", () => {
-    expect(guidance.entries).toEqual(prevGuidance.entries);
-    expect(guidance.evidence).toEqual(prevGuidance.evidence);
-    // Same eleven topic groups; prefixes only ever gain new books' tags.
-    type Topic = { id: string; label: string; source_prefixes: string[] };
-    const pick = (t: Topic) => [t.id, t.label];
-    expect(guidance.topics.map(pick)).toEqual(prevGuidance.topics.map(pick));
-    prevGuidance.topics.forEach((t: Topic, i: number) =>
-      expect(guidance.topics[i].source_prefixes).toEqual(
-        expect.arrayContaining(t.source_prefixes),
+describe("Public Library files", () => {
+  const files = walk("public/library-data");
+
+  it("publish only guidance, in every content version", () => {
+    expect(files.sort()).toEqual(
+      ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0"].map(
+        (v) => `${pub(v)}guidance.json`,
       ),
     );
-    const n = prevIndex.entries.length;
-    expect(index.entries.slice(0, n)).toEqual(prevIndex.entries);
-    const prevBooks = new Set(prevIndex.sources.map((s: Raw) => s.id));
-    expect(
-      index.entries.slice(n).every((e: Raw) => !prevBooks.has(e.source_id)),
-    ).toBe(true);
-    for (const e of prevBundle.entries as Raw[])
-      expect(canonical.get(e.id), e.id).toEqual(e);
-    expect(bundle.evidence).toEqual(
-      expect.arrayContaining(prevBundle.evidence),
-    );
-    expect(bundle.corrections).toEqual(
-      expect.arrayContaining(prevBundle.corrections),
-    );
-    for (const id of prevBooks as Set<string>) {
-      const old = json(`${p}books/${id}.json`);
-      expect(books[id].entries, id).toEqual(old.entries);
-      expect(books[id].evidence, id).toEqual(old.evidence);
-      expect(books[id].corrections, id).toEqual(old.corrections);
+  });
+
+  it("contain no review index, book detail, bundle, schema or PDF", () => {
+    const all = walk("public");
+    for (const f of all) {
+      expect(f).not.toMatch(/reviews-index|\/books\/|bundle|schema/);
+      expect(f.toLowerCase()).not.toMatch(/\.pdf$/);
     }
-  });
-});
-
-describe("Library parsing of the real pack", () => {
-  const g = parseGuidance(guidance);
-  const r = parseReviewsIndex(index);
-
-  it("accepts all 24 core cards as guidance and nothing else", () => {
-    expect(g.entries).toHaveLength(24);
-    expect(g.rejected).toBe(0);
-    expect(g.entries.every((e) => e.origin === "authoritative_core")).toBe(
-      true,
-    );
-    expect(g.entries.every((e) => e.status === "authority_supported")).toBe(
-      true,
-    );
-    expect(g.evidence.size).toBe(guidance.evidence.length);
-  });
-
-  it("keeps every book classification as recorded", () => {
-    expect(r.entries).toHaveLength(3714);
-    expect(r.rejected).toBe(0);
-    expect(r.sources).toHaveLength(19);
-    const counts: Record<string, number> = {};
-    for (const e of r.entries) counts[e.status] = (counts[e.status] ?? 0) + 1;
-    expect(counts).toEqual({
-      verified_principle: 160,
-      source_reference: 1496,
-      needs_review: 2058,
-    });
-  });
-
-  it("parses every book file without losing records, citations or components", () => {
-    let total = 0;
-    let components = 0;
-    for (const [id, raw] of Object.entries(books)) {
-      const d = parseBookDetail(raw, id);
-      expect(d.entries.size).toBe(raw.entries.length);
-      expect(d.evidence.size).toBe(raw.evidence.length);
-      expect(d.corrections.size).toBe(raw.corrections.length);
-      total += d.entries.size;
-      for (const e of raw.entries) {
-        const p = d.entries.get(e.id)!;
-        const sr = e.source_record as Record<string, unknown> & {
-          source_components?: { text: string }[];
-          original_claim: { text: string };
-        };
-        expect(p.source_citations).toEqual(e.source_citations);
-        expect(p.safety_flags).toEqual(e.safety_flags);
-        expect(p.correction_ids).toEqual(e.correction_ids);
-        expect(p.evidence).toEqual(e.evidence);
-        expect(p.record.original_claim?.text).toBe(sr.original_claim.text);
-        expect(p.record.source_components.map((c) => c.text)).toEqual(
-          (sr.source_components ?? []).map((c) => c.text),
-        );
-        components += p.record.source_components.length;
-        // Every referenced correction and evidence record resolves.
-        for (const c of p.correction_ids)
-          expect(d.corrections.has(c), c).toBe(true);
-        for (const ev of p.evidence)
-          expect(d.evidence.has(ev.evidence_id), ev.evidence_id).toBe(true);
-      }
-    }
-    expect(components).toBe(1533);
-    expect(total).toBe(3714);
   });
 });

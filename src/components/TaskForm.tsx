@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Plus, Save, Trash2 } from "lucide-react";
+import { BookOpen, Check, Plus, Save, Trash2 } from "lucide-react";
 import {
   addDoc,
   collection,
@@ -9,7 +9,8 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
-import { useState, type FormEvent, type ReactNode } from "react";
+import Link from "next/link";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useHousehold } from "@/components/SessionProvider";
 import {
   Button,
@@ -20,6 +21,7 @@ import {
   Textarea,
 } from "@/components/ui";
 import { db } from "@/lib/firebase";
+import { cardUrl } from "@/lib/library/actions";
 import { MILESTONES } from "@/lib/readiness";
 import {
   DEFAULT_TASK_DRAFT,
@@ -76,6 +78,7 @@ export function TaskForm({
       : (prefill ?? DEFAULT_TASK_DRAFT),
   );
   const [busy, setBusy] = useState(false);
+  const saving = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const set = <K extends keyof TaskDraft>(k: K, v: TaskDraft[K]) =>
     setD((p) => ({ ...p, [k]: v }));
@@ -87,7 +90,7 @@ export function TaskForm({
   }
 
   async function persist(values: TaskDraft) {
-    if (busy) return;
+    if (saving.current) return;
     setError(null);
     let draft: TaskDraft;
     try {
@@ -96,6 +99,7 @@ export function TaskForm({
       setError((err as Error).message);
       return;
     }
+    saving.current = true;
     setBusy(true);
     try {
       if (initial) {
@@ -115,6 +119,7 @@ export function TaskForm({
       onDone();
     } catch (err) {
       setError((err as Error).message);
+      saving.current = false;
       setBusy(false);
     }
   }
@@ -134,6 +139,18 @@ export function TaskForm({
   return (
     <form onSubmit={save} className="space-y-3">
       {hint}
+      {initial?.libraryEntryId && (
+        <p className="flex items-center gap-1.5 text-xs text-sage">
+          <BookOpen size={13} aria-hidden />
+          Drafted from a Library card:{" "}
+          <Link
+            href={cardUrl(initial.libraryEntryId)}
+            className="text-copper-light hover:underline"
+          >
+            open it in the Library
+          </Link>
+        </p>
+      )}
       <Field label="Task">
         <Input
           required

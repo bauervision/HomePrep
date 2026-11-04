@@ -1,22 +1,14 @@
 /*
- * Library data models for the versioned, read-only reference pack in
+ * Library data models for the versioned, read-only guidance pack in
  * `public/library-data/`. Library content is independent of household data:
  * nothing here is a task, inventory item, requirement or readiness credit.
+ * Book reviews are a private research archive and are never published.
  */
 
-export const LIBRARY_VERSION = "1.3.0";
+export const LIBRARY_VERSION = "1.4.0";
 
-/** Display status after validation. Anything unrecognized is "unavailable". */
-export type DisplayStatus =
-  | "authority_supported"
-  | "verified_principle"
-  | "source_reference"
-  | "needs_review"
-  | "unavailable";
-
-/** Book-review classifications exactly as the examinations record them. */
-export type BookClassification =
-  "verified_guidance" | "source_derived_reference" | "needs_review";
+/** Display status after validation. Only authority-supported cards are shown. */
+export type DisplayStatus = "authority_supported";
 
 export interface LibraryTopic {
   id: string;
@@ -47,15 +39,14 @@ export interface MilestoneMapping {
   rationale: string | null;
 }
 
-/** Fields shared by every Library entry (guidance and book reviews). */
+/** Fields shared by every Library entry. */
 export interface EntryBase {
   id: string;
-  origin: "authoritative_core" | "book_review";
+  origin: "authoritative_core";
   source_id: string;
   source_item_id: string;
   title: string;
   summary: string;
-  classification: BookClassification | null;
   /** Validated status; never derived from position, search or collection. */
   status: DisplayStatus;
   reviewed_on: string | null;
@@ -88,19 +79,11 @@ export interface CoreCard {
 }
 
 export interface GuidanceEntry extends EntryBase {
-  origin: "authoritative_core";
-  status: "authority_supported";
   card: CoreCard;
 }
 
-/** Book-review catalog entry: reviewed fields only, no original claims. */
-export interface ReviewIndexEntry extends EntryBase {
-  origin: "book_review";
-  detail_path: string;
-}
-
 export interface EvidenceRecord {
-  /** Namespaced, e.g. `B001:E01` or `CORE:A01`. */
+  /** Namespaced, e.g. `CORE:A01`. */
   id: string;
   source_id: string;
   publisher: string | null;
@@ -110,64 +93,18 @@ export interface EvidenceRecord {
   /** The URL as recorded, kept to explain why a link is unavailable. */
   recorded_url: string | null;
   accessed_on: string | null;
+  /** "Last updated" date the page showed when it was checked. */
+  page_last_updated: string | null;
   access_status: string | null;
   locator: string | null;
   finding: string | null;
   support_scope: string | null;
 }
 
-export interface CorrectionRecord {
-  /** Namespaced, e.g. `B001:C01`. */
-  id: string;
-  source_id: string;
-  title: string;
-  guidance: string;
-  basis: string | null;
-  evidence_ids: string[];
-}
-
-export interface SourceComponent {
-  kind: string;
-  source_label: string | null;
-  representation: string | null;
-  text: string;
-  source_citations: SourceCitation[];
-}
-
-/** The unreviewed parts of a book record, shown only in a collapsed section. */
-export interface BookSourceRecord {
-  chapter_id: string | null;
-  item_type: string | null;
-  original_claim: { text: string; representation: string | null } | null;
-  reviewed_guidance: string | null;
-  verification: {
-    status: string | null;
-    reviewed_on: string | null;
-    verified_on: string | null;
-    review_requirement: string | null;
-  };
-  duplicate_group: string | null;
-  source_components: SourceComponent[];
-}
-
-export interface BookDetailEntry extends EntryBase {
-  origin: "book_review";
-  record: BookSourceRecord;
-}
-
-export interface Chapter {
-  id: string;
-  number: number | null;
-  title: string;
-}
-
 export interface LibrarySource {
   id: string;
   title: string;
-  author: string | null;
-  copyright_year: number | null;
   reviewed_on: string | null;
-  chapters: Chapter[];
 }
 
 export interface ExampleScenario {
@@ -183,18 +120,4 @@ export interface GuidancePack {
   entries: GuidanceEntry[];
   /** Records that failed validation and were excluded (never shown as guidance). */
   rejected: number;
-}
-
-export interface ReviewsIndex {
-  topics: LibraryTopic[];
-  sources: LibrarySource[];
-  entries: ReviewIndexEntry[];
-  rejected: number;
-}
-
-export interface BookDetail {
-  source: LibrarySource;
-  evidence: Map<string, EvidenceRecord>;
-  corrections: Map<string, CorrectionRecord>;
-  entries: Map<string, BookDetailEntry>;
 }

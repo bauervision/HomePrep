@@ -245,12 +245,15 @@ export function Modal({
   title,
   children,
   wide,
+  eyebrow,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   wide?: boolean;
+  /** Optional context above the title, e.g. a Library topic label. */
+  eyebrow?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -276,10 +279,13 @@ export function Modal({
     >
       {open && (
         <div className="flex max-h-[85dvh] flex-col">
-          <header className="flex items-center justify-between border-b border-line px-4 py-3">
-            <h2 className="text-xs font-semibold tracking-[0.16em] text-ivory uppercase">
-              {title}
-            </h2>
+          <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+            <div className="min-w-0">
+              {eyebrow && <div className="mb-1">{eyebrow}</div>}
+              <h2 className="text-xs font-semibold tracking-[0.16em] text-ivory uppercase">
+                {title}
+              </h2>
+            </div>
             <button
               type="button"
               onClick={onClose}

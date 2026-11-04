@@ -5,8 +5,9 @@
 // with fixture sessions and data so layouts can be checked without signing in.
 // Usage: /preview/?screen=signin|onboarding|dashboard|goals|budget|notes|library|inventory-form|kit|modal
 // Dashboard also accepts &objective=7d|30d|60d|90d; goals accepts
-// &milestone=72h|7d…&goal=cooking. Library accepts its own view/q/topic/
-// book/status/entry parameters and reads the real static Library pack.
+// &milestone=72h|7d…&goal=cooking (and &requirement= or &draft=<card>).
+// Library accepts its own q/topic/entry parameters and reads the real static
+// Library guidance.
 
 import type { User } from "firebase/auth";
 import {

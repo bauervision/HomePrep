@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Comments } from "@/components/Comments";
 import { useHousehold } from "@/components/SessionProvider";
@@ -19,7 +20,11 @@ import {
 } from "@/components/ui";
 import { sortTasks, useTasks } from "@/lib/data";
 import { db } from "@/lib/firebase";
-import { setParams } from "@/lib/url-state";
+import { cardUrl } from "@/lib/library/actions";
+import { useGuidance } from "@/lib/library/load";
+import { taskDraftFromCard } from "@/lib/library-drafts";
+import { createLibraryTask, isTaskFromCard } from "@/lib/library-tasks";
+import { setParams, useSearch } from "@/lib/url-state";
 import { isMilestoneKey, MILESTONES } from "@/lib/readiness";
 import {
   PRIORITY_LABEL,
@@ -48,6 +53,18 @@ export default function TasksPage() {
       : new URLSearchParams(window.location.search).get("task"),
   );
   const [rowError, setRowError] = useState<string | null>(null);
+  // Deep link: /tasks/?draft=<card> opens a new task prefilled from a Library
+  // card. Nothing is saved until the household creates it.
+  const draftId = useSearch().get("draft");
+  const guidance = useGuidance(!!draftId);
+  const card = draftId
+    ? (guidance.data?.entries.find((e) => e.id === draftId) ?? null)
+    : null;
+
+  const [anotherCard, setAnotherCard] = useState<string | null>(null);
+  const existingCardTasks = card
+    ? data.filter((t) => isTaskFromCard(t, card.id))
+    : [];
 
   const rows = useMemo(
     () =>
@@ -63,6 +80,11 @@ export default function TasksPage() {
       ? (data.find((t) => t.id === editing) ?? null)
       : null;
   const done = data.filter((t) => t.status === "complete").length;
+
+  function closeDraft() {
+    setAnotherCard(null);
+    setParams({ draft: null });
+  }
 
   function closeTask() {
     setEditing(null);
@@ -176,6 +198,79 @@ export default function TasksPage() {
           </ul>
         )}
       </Card>
+      <Modal
+        open={!!draftId}
+        onClose={closeDraft}
+        title="New task from the Library"
+        wide
+      >
+        {draftId && card && existingCardTasks.length > 0 && (
+          <div className="mb-3 space-y-2">
+            {existingCardTasks.map((t) => (
+              <div key={t.id}>
+                <Button
+                  onClick={() => {
+                    closeDraft();
+                    setEditing(t.id);
+                  }}
+                >
+                  View existing task
+                </Button>
+                <p className="text-sm">
+                  {t.title} · {TASK_STATUS_LABEL[t.status]} ·{" "}
+                  {MILESTONES.find((m) => m.key === t.milestone)?.label}
+                </p>
+              </div>
+            ))}
+            {anotherCard !== card.id && (
+              <Button onClick={() => setAnotherCard(card.id)}>
+                Add another task
+              </Button>
+            )}
+            {anotherCard === card.id && (
+              <p className="text-xs text-sage">
+                Describe a different outcome for this follow-up. Changing
+                status, priority or milestone does not create distinct work.
+              </p>
+            )}
+          </div>
+        )}
+        {draftId &&
+        card &&
+        !loading &&
+        (existingCardTasks.length === 0 || anotherCard === card.id) ? (
+          <TaskForm
+            key={`draft:${card.id}`}
+            initial={null}
+            prefill={taskDraftFromCard(card)}
+            submitLabel="Create task"
+            hint={
+              <p className="text-xs text-sage">
+                Drafted from{" "}
+                <Link href={cardUrl(card.id)} className="text-copper-light">
+                  {card.title}
+                </Link>
+                . Review and edit before creating; nothing is saved until you
+                do. Completing the task only counts toward goals that use it.
+              </p>
+            }
+            onCreate={async (draft) => {
+              await createLibraryTask(household.id, card.id, draft);
+            }}
+            onDone={closeDraft}
+          />
+        ) : card ? null : draftId && guidance.status === "error" ? (
+          <ErrorText>{guidance.error}</ErrorText>
+        ) : draftId && guidance.status === "ready" ? (
+          <p className="text-sm text-ivory-dim">
+            That Library card isn’t available, so there’s nothing to draft.
+          </p>
+        ) : (
+          <p role="status" className="text-sm text-sage">
+            Loading the Library card…
+          </p>
+        )}
+      </Modal>
       <Modal
         // A deep-linked task that no longer exists simply leaves the modal closed.
         open={editing === "new" || current !== null}

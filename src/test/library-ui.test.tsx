@@ -93,62 +93,117 @@ async function popstate(fn: () => void) {
   });
 }
 
+const ALL = "27 guidance entries";
+/** Next.js adds the trailing slash in the export; the test router doesn't. */
+const route = (href: string | null) => href?.replace("/?", "?");
+const GUIDANCE_URL = "/library-data/v1.4.0/guidance.json";
+const pillLabels = () =>
+  within(screen.getByRole("group", { name: "Topic" }))
+    .getAllByRole("button")
+    .map((b) => b.textContent?.replace(/\d+$/, ""));
+
 describe("Library: guidance", () => {
-  it("opens on the 24 guidance cards, loading only guidance", async () => {
+  it("opens on the guidance cards, loading only guidance, with no review collection", async () => {
     open();
     expect(screen.getByRole("status").textContent).toMatch(/Loading guidance/);
-    await screen.findByText("24 guidance entries");
-    expect(cards()).toHaveLength(24);
-    expect(requested()).toEqual(["/library-data/v1.3.0/guidance.json"]);
-    expect(
-      screen
-        .getByRole("button", { name: /Guidance/ })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+    await screen.findByText(ALL);
+    expect(cards()).toHaveLength(27);
+    expect(requested()).toEqual([GUIDANCE_URL]);
+    expect(screen.queryByRole("button", { name: /Book reviews/ })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Collection" })).toBeNull();
     expect(document.body.textContent).not.toMatch(
-      /Needs review|Source reference|Verified principle/,
+      /Needs review|Source reference|Verified principle|book review/i,
     );
-    expect(document.body.textContent).toMatch(/example plan for five people/);
+    expect(document.body.textContent).not.toMatch(
+      /example plan for five people/,
+    );
   });
 
-  it("filters by one topic at a time with pressed state, and toggles back", async () => {
+  it("shows each card's topic icon and label above the title, out of the metadata", async () => {
     open();
-    await screen.findByText("24 guidance entries");
-    const labels = within(screen.getByRole("group", { name: "Topic" }))
-      .getAllByRole("button")
-      .map((b) => b.textContent?.replace(/\d+$/, ""));
-    expect(labels).toEqual([
+    await screen.findByText(ALL);
+    for (const [id, topic, label] of [
+      ["HP-W01", "water", "Water"],
+      ["HP-F01", "food", "Food and preservation"],
+      ["HP-P01", "power", "Power and heat"],
+      ["HP-S01", "sanitation", "Sanitation"],
+      ["HP-C02", "communications", "Communications"],
+      ["HP-H01", "shelter", "Shelter"],
+    ]) {
+      const card = cards().find((c) => c.dataset.entryId === id)!;
+      expect(card.dataset.topic).toBe(topic);
+      const cue = card.querySelector(`[data-topic="${topic}"]`)!;
+      // Recognizable without color: an icon and the visible label.
+      expect(cue.textContent).toBe(label);
+      expect(cue.querySelector("svg")).toBeTruthy();
+      // The label comes before the title, and isn't repeated in the metadata.
+      expect(card.textContent!.indexOf(label)).toBeLessThan(
+        card.textContent!.indexOf(
+          card.querySelector(".text-\\[15px\\]")!.textContent!,
+        ),
+      );
+      expect(card.textContent!.split(label)).toHaveLength(2);
+      expect(card.textContent).toMatch(/Authority-supported guidance/);
+    }
+    // Neighboring topics use different accents.
+    const accent = (id: string) =>
+      cards()
+        .find((c) => c.dataset.entryId === id)!
+        .className.match(/border-l-(\w+)-/)![1];
+    expect(new Set(["HP-W01", "HP-F01", "HP-P01"].map(accent)).size).toBe(3);
+  });
+
+  it("filters by topic with an icon, a check and pressed state, and shows Shelter from the data", async () => {
+    open();
+    await screen.findByText(ALL);
+    expect(pillLabels()).toEqual([
       "All topics",
       "Water",
       "Food and preservation",
       "Power and heat",
       "Sanitation",
       "Communications",
+      "Shelter",
     ]);
-    fireEvent.click(pill(/^Water/));
-    expect(pill(/^Water/).getAttribute("aria-pressed")).toBe("true");
+    expect(pill(/^Shelter/).textContent).toBe("Shelter3");
+    expect(pill(/^Shelter/).querySelector("svg")).toBeTruthy();
+    // All topics is neutral; topic pills carry their accent before selection.
+    expect(pill(/^All topics/).dataset.topic).toBeUndefined();
+
+    fireEvent.click(pill(/^Communications/));
+    const comms = pill(/^Communications/);
+    expect(comms.getAttribute("aria-pressed")).toBe("true");
+    expect(comms.className).toMatch(/outline-violet/);
+    expect(comms.querySelector("svg.lucide-check")).toBeTruthy();
     expect(pill(/^All topics/).getAttribute("aria-pressed")).toBe("false");
-    expect(params().get("topic")).toBe("water");
-    expect(cards()).toHaveLength(6);
-    fireEvent.click(pill(/^Sanitation/));
+    expect(params().get("topic")).toBe("communications");
     expect(cards()).toHaveLength(4);
-    fireEvent.click(pill(/^Sanitation/));
+    for (const c of cards()) {
+      expect(c.dataset.topic).toBe("communications");
+      expect(c.className).toMatch(/border-l-violet/);
+    }
+
+    fireEvent.click(pill(/^Shelter/));
+    expect(cardIds()).toEqual(["HP-H01", "HP-H02", "HP-H03"]);
+    fireEvent.click(pill(/^Shelter/));
     expect(params().get("topic")).toBeNull();
-    expect(cards()).toHaveLength(24);
+    expect(cards()).toHaveLength(27);
   });
 
-  it("finds typo queries and offers recovery when nothing matches", async () => {
+  it("finds typo queries, keeps topic cues, and offers recovery when nothing matches", async () => {
     open();
-    await screen.findByText("24 guidance entries");
+    await screen.findByText(ALL);
     search("frige");
     await waitFor(() => expect(cardIds()[0]).toBe("HP-F04"));
+    expect(cards()[0].dataset.topic).toBe("food");
     // No water card matches "frige", so its pill is disabled.
     expect((pill(/^Water/) as HTMLButtonElement).disabled).toBe(true);
+    search("tornado");
+    await waitFor(() => expect(cardIds()[0]).toBe("HP-H01"));
     search("");
     fireEvent.click(pill(/^Water/));
     search("zzzzqqq");
-    await screen.findByText(/No guidance match “zzzzqqq” with these filters/);
-    expect(screen.queryByRole("status")).toBeNull(); // not a loading state
+    await screen.findByText(/No guidance matches “zzzzqqq” with this topic/);
     fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
     await waitFor(() => expect(cards()).toHaveLength(6));
     search("zzzzqqq");
@@ -158,51 +213,64 @@ describe("Library: guidance", () => {
     expect(params().get("topic")).toBeNull();
   });
 
-  it("disables topics that have no matches under the current search", async () => {
-    open("/library/?q=handwashng");
-    await waitFor(() => expect(cardIds()[0]).toBe("HP-S01"));
-    expect((pill(/^Power and heat/) as HTMLButtonElement).disabled).toBe(true);
-    expect((pill(/^Sanitation/) as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it("shows a core card's full guidance, with authority links, as a five-person example", async () => {
+  it("shows a core card's full guidance and its topic in the detail header", async () => {
     open();
-    await screen.findByText("24 guidance entries");
+    await screen.findByText(ALL);
     const trigger = cards().find((c) => c.dataset.entryId === "HP-W01")!;
     fireEvent.click(trigger);
     expect(params().get("entry")).toBe("HP-W01");
     const d = dialog();
-    expect(within(d).getByText("Example plan for five people.")).toBeTruthy();
+    const header = d.querySelector("header")!;
+    expect(header.querySelector('[data-topic="water"]')!.textContent).toBe(
+      "Water",
+    );
+    expect(
+      within(d).getByText(/Quantities shown are examples for five people/),
+    ).toBeTruthy();
     for (const h of [
       "When to use",
-      "Prerequisites",
       "Steps",
       "Limits",
       "Observable completion requirements",
-      "Maintenance",
-      "Escalation",
-      "Editorial adaptation",
       "Authority sources",
     ])
       expect(within(d).getByRole("heading", { name: h })).toBeTruthy();
-    expect(d.textContent).toMatch(/Household completion: not assessed/);
-    expect(d.textContent).toMatch(
-      /irrigation well contributes no drinking-water/,
-    );
-    expect(d.textContent).not.toMatch(/Book p\./);
     const link = within(d).getByRole("link", { name: /www\.cdc\.gov/ });
     expect(link.getAttribute("href")).toMatch(/^https:\/\/www\.cdc\.gov\//);
     expect(link.getAttribute("rel")).toContain("noopener");
-    // 14 days is shown as recorded, not mapped to an app objective.
-    expect(d.textContent).toMatch(/14 days/);
+    expect(d.textContent).not.toMatch(/Milestone associations/);
+    expect(d.textContent).not.toMatch(/Research metadata only/);
 
-    // Back closes the detail and keeps the filter context.
     await popstate(() => window.history.back());
     expect(params().get("entry")).toBeNull();
     expect(dialog()).toBeNull();
     expect(document.activeElement).toBe(
       cards().find((c) => c.dataset.entryId === "HP-W01"),
     );
+  });
+
+  it("deep-links to a Shelter card with its sources, page dates and review date", async () => {
+    open("/library/?entry=HP-H01");
+    await within(document.body).findByRole("heading", { name: "Steps" });
+    const d = dialog();
+    expect(d.querySelector('header [data-topic="shelter"]')!.textContent).toBe(
+      "Shelter",
+    );
+    expect(d.textContent).toMatch(/Reviewed Nov 4, 2026/);
+    expect(d.textContent).toMatch(/^.*Tornado or severe wind warning/);
+    expect(d.textContent).toMatch(/closed attic/);
+    for (const host of ["www.ready.gov"])
+      expect(
+        within(d).getAllByRole("link", { name: new RegExp(host) }).length,
+      ).toBeGreaterThanOrEqual(3);
+    expect(d.textContent).toMatch(
+      /Page updated Jun 2, 2026 · Checked Nov 4, 2026/,
+    );
+    // Filter context survives the deep link.
+    cleanup();
+    open("/library/?topic=shelter&entry=HP-H02");
+    await within(document.body).findByRole("heading", { name: "Steps" });
+    expect(cardIds()).toEqual(["HP-H01", "HP-H02", "HP-H03"]);
   });
 
   it("closes a detail with Escape (dialog close) and returns focus", async () => {
@@ -229,10 +297,91 @@ describe("Library: guidance", () => {
 
   it("recovers from invalid parameters", async () => {
     open("/library/?view=everything&topic=nonsense");
-    await screen.findByText("24 guidance entries");
+    await screen.findByText(ALL);
     expect(screen.getByRole("status").textContent).toMatch(/view, topic/);
     fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
     expect(params().toString()).toBe("");
+  });
+});
+
+describe("Library: retired book-review links", () => {
+  it("falls back to Guidance with a notice, never requesting review data", async () => {
+    for (const url of [
+      "/library/?view=reviews",
+      "/library/?view=reviews&book=B007&status=needs-review",
+      "/library/?view=reviews&entry=B015-192",
+      "/library/?entry=B001-027",
+    ]) {
+      cleanup();
+      clearLibraryCache();
+      fetchMock.mockClear();
+      open(url);
+      await screen.findByText(ALL);
+      await waitFor(() => expect(params().get("notice")).toBe("reviews"));
+      for (const k of ["view", "book", "status", "entry"])
+        expect(params().get(k), `${url} ${k}`).toBeNull();
+      expect(screen.getByRole("status").textContent).toMatch(
+        /Book reviews are no longer part of the household Library/,
+      );
+      expect(dialog()).toBeNull();
+      expect(requested()).toEqual([GUIDANCE_URL]);
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(params().get("notice")).toBeNull();
+  });
+
+  it("keeps guidance search and topic from an old link", async () => {
+    open("/library/?view=reviews&q=boil&topic=water");
+    await waitFor(() => expect(params().get("notice")).toBe("reviews"));
+    expect(params().get("q")).toBe("boil");
+    expect(params().get("topic")).toBe("water");
+    await waitFor(() => expect(cardIds()[0]).toBe("HP-W05"));
+  });
+});
+
+describe("Library: card actions", () => {
+  const actionLinks = () =>
+    within(within(dialog()).getByTestId("library-actions"))
+      .getAllByRole("link")
+      .map((a) => [a.textContent, route(a.getAttribute("href"))]);
+
+  it("offers a task draft and the existing goal for “Agree on two meeting places”", async () => {
+    open("/library/?entry=HP-C02");
+    await within(document.body).findByTestId("library-actions");
+    expect(actionLinks()).toEqual([
+      ["Create Task", "/tasks?draft=HP-C02"],
+      [
+        "View existing goal",
+        "/goals?milestone=72h&goal=comms&requirement=72h.comms.reconnect",
+      ],
+    ]);
+    // The actions come before the guidance itself.
+    const d = dialog();
+    expect(
+      d.textContent!.indexOf("Create Task") <
+        d.textContent!.indexOf("When to use"),
+    ).toBe(true);
+    expect(d.textContent).toMatch(/Review the draft before saving/);
+  });
+
+  it("offers Create Goal where no built-in goal covers the card", async () => {
+    open("/library/?entry=HP-H02");
+    await within(document.body).findByTestId("library-actions");
+    expect(actionLinks()).toEqual([
+      ["Create Task", "/tasks?draft=HP-H02"],
+      ["Create Goal", "/goals?milestone=72h&goal=plan&draft=HP-H02"],
+    ]);
+  });
+
+  it("offers actions on every authority-supported card", async () => {
+    open();
+    await screen.findByText(ALL);
+    for (const id of cardIds()) {
+      cleanup();
+      open(`/library/?entry=${id}`);
+      await within(document.body).findByTestId("library-actions");
+      expect(actionLinks()).toHaveLength(2);
+    }
   });
 });
 
@@ -249,7 +398,7 @@ describe("Library: loading failures", () => {
     expect(screen.queryByText(/0 guidance/)).toBeNull();
     fail = false;
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await screen.findByText("24 guidance entries");
+    await screen.findByText(ALL);
   });
 
   it("treats invalid JSON and a malformed payload as errors", async () => {
@@ -262,434 +411,31 @@ describe("Library: loading failures", () => {
       /not in the expected format/,
     );
     cleanup();
+    clearLibraryCache();
     override = (url) =>
-      url.endsWith("reviews-index.json")
-        ? new Response(JSON.stringify({ content_version: "1.3.0" }), {
+      url.endsWith("guidance.json")
+        ? new Response(JSON.stringify({ content_version: "1.4.0" }), {
             status: 200,
           })
         : undefined;
-    open("/library/?view=reviews");
+    open();
     expect((await screen.findByRole("alert")).textContent).toMatch(
-      /book review index.*sources/,
+      /not in the expected format/,
     );
   });
 
   it("reuses loaded files within the session", async () => {
     const first = open();
-    await screen.findByText("24 guidance entries");
+    await screen.findByText(ALL);
     first.unmount();
     open();
-    await screen.findByText("24 guidance entries");
-    expect(requested()).toEqual(["/library-data/v1.3.0/guidance.json"]);
-  });
-});
-
-describe("Library: book reviews", () => {
-  it("loads the index on entering, with its own labels, filters and pagination", async () => {
-    open();
-    await screen.findByText("24 guidance entries");
-    fireEvent.click(screen.getByRole("button", { name: /Book reviews/ }));
-    expect(params().get("view")).toBe("reviews");
-    await screen.findByText("3,714 book review records · showing 24");
-    expect(requested()).toContain("/library-data/v1.3.0/reviews-index.json");
-    expect(requested().some((u) => u.includes("/books/"))).toBe(false);
-    expect(cards()).toHaveLength(24);
-    expect(document.body.textContent).toMatch(/unresolved claims/);
-
-    const book = screen.getByRole("combobox", { name: "Book" });
-    const options = within(book)
-      .getAllByRole("option")
-      .map((o) => o.textContent);
-    expect(options).toContain("A Farmer’s Water Independence Guide (214)");
-    const status = screen.getByRole("combobox", { name: "Review status" });
-    expect(
-      within(status)
-        .getAllByRole("option")
-        .map((o) => o.textContent),
-    ).toEqual([
-      "All review statuses",
-      "Verified principle — limited scope (160)",
-      "Source reference — not independently verified (1,496)",
-      "Needs review — not approved instructions (2,058)",
-    ]);
-
-    fireEvent.click(screen.getByRole("button", { name: /Show more/ }));
-    expect(cards()).toHaveLength(48);
-    fireEvent.change(status, { target: { value: "verified" } });
-    expect(params().get("status")).toBe("verified");
-    await screen.findByText(
-      "160 of 3,714 book review records match · showing 24",
-    );
-    expect(cards()).toHaveLength(24); // pagination reset
-    for (const c of cards())
-      expect(c.textContent).toMatch(/Verified principle — limited scope/);
-
-    fireEvent.change(book, { target: { value: "B006" } });
-    fireEvent.change(status, { target: { value: "" } });
-    await screen.findByText(
-      "58 of 3,714 book review records match · showing 24",
-    );
-    fireEvent.click(pill(/^Food and preservation/));
-    for (const c of cards()) expect(c.textContent).toMatch(/Cyber Sabotage/);
-
-    // Search results keep their review labels.
-    fireEvent.change(book, { target: { value: "" } });
-    fireEvent.click(pill(/^All topics/));
-    search("boilng watr");
-    await waitFor(() => expect(cards().length).toBeGreaterThan(0));
-    for (const c of cards())
-      expect(c.textContent).toMatch(
-        /Verified principle — limited scope|Source reference — not independently verified|Needs review — not approved instructions/,
-      );
-
-    // Going back to guidance never shows book records as guidance.
-    fireEvent.click(screen.getByRole("button", { name: /^Guidance/ }));
-    search("");
-    await screen.findByText("24 guidance entries");
-    expect(cardIds().every((id) => id?.startsWith("HP-"))).toBe(true);
-  });
-
-  it("opens a direct link to a book entry in its own collection, with corrections and collapsed source material", async () => {
-    open("/library/?entry=B001-027");
-    await within(document.body).findByRole("heading", {
-      name: "Reviewed guidance",
-    });
-    expect(params().get("view")).toBe("reviews");
-    const d = dialog();
-    expect(d.textContent).toMatch(/Needs review — not approved instructions/);
-    expect(d.textContent).not.toMatch(/Authority-supported guidance/);
-    expect(within(d).getByText("Bleach treatment")).toBeTruthy();
-    expect(d.textContent).toMatch(/B001:C01/);
-    expect(
-      within(d).getByRole("list", { name: "Safety flags" }).textContent,
-    ).toBe("microbialdose");
-    expect(d.textContent).toMatch(/Correction or constraint/);
-    expect(d.textContent).toMatch(/Book p\. 18 · PDF p\. 19/);
-    expect(d.textContent).toMatch(/Purifying Your Water/);
-    expect(d.textContent).not.toMatch(/Chapter \d+:/);
-    const details = d.querySelector("details")!;
-    expect(details.open).toBe(false);
-    expect(details.querySelector("summary")!.textContent).toMatch(
-      /Original source material — unreviewed/,
-    );
-    // The original claim is only inside the collapsed section.
-    expect(details.textContent).toMatch(/Eight drops of 6% bleach/);
-    expect(d.textContent!.indexOf("Eight drops of 6% bleach")).toBeGreaterThan(
-      d.textContent!.indexOf("Original source material"),
-    );
-    expect(requested()).toEqual([
-      "/library-data/v1.3.0/guidance.json",
-      "/library-data/v1.3.0/reviews-index.json",
-      "/library-data/v1.3.0/books/B001.json",
-    ]);
-    // Closing a direct link stays on the Library.
-    fireEvent.click(within(d).getByRole("button", { name: "Close" }));
-    expect(params().get("entry")).toBeNull();
-    expect(window.location.pathname).toBe("/library/");
-  });
-
-  it("lists the added books and loads each detail from its own file", async () => {
-    open("/library/?view=reviews");
-    await screen.findByText("3,714 book review records · showing 24");
-    const options = within(screen.getByRole("combobox", { name: "Book" }))
-      .getAllByRole("option")
-      .map((o) => o.textContent);
-    expect(options).toHaveLength(20);
-    expect(options).toEqual(
-      expect.arrayContaining([
-        "A Former Amish’s Survival Guide (239)",
-        "How to Create Your Own Self-Sufficient Farm on 4 Acres of Land (170)",
-        "An Army Engineer’s EMP-Proof Home Guide (247)",
-        "How to Outlive an EMP the Early Pioneer Way (159)",
-        "An Herbalist’s SHTF Natural Pharmacy Guide (265)",
-        "A Spec Ops Untraceable Communication Guide (159)",
-        "A Syrian Survivor’s Civil War Guide (215)",
-        "A Combat Doctor’s SHTF Medicine Guide (340)",
-        "A Green Beret’s BUG-Out Guide (163)",
-        "A Law Enforcement Officer’s Looter-Proof Home Guide (209)",
-        "An Army Officer’s Martial Law Survival Guide (39)",
-        "A NASA Engineer’s Underground Apocalypse Farm Guide (43)",
-      ]),
-    );
-    for (const [entry, book] of [
-      ["B016-001", "B016"],
-      ["B017-001", "B017"],
-      ["B008-001", "B008"],
-      ["B009-001", "B009"],
-      ["B010-033", "B010"],
-      ["B011-001", "B011"],
-      ["B012-001", "B012"],
-      ["B013-140", "B013"],
-      ["B014-215", "B014"],
-      ["B015-192", "B015"],
-    ]) {
-      cleanup();
-      fetchMock.mockClear();
-      open(`/library/?view=reviews&entry=${entry}`);
-      await within(document.body).findByRole("list", { name: "Citations" });
-      expect(requested().filter((u) => u.includes("/books/"))).toEqual([
-        `/library-data/v1.3.0/books/${book}.json`,
-      ]);
-    }
-  });
-
-  it("opens B018 and B019 from the review index with their page offsets and warnings", async () => {
-    const openFromIndex = async (book: string, id: string) => {
-      cleanup();
-      clearLibraryCache();
-      fetchMock.mockClear();
-      open(`/library/?view=reviews&book=${book}`);
-      await screen.findByText(/book review records match/);
-      expect(requested().some((u) => u.includes("/books/"))).toBe(false);
-      // Later records are past the first page of 24 cards.
-      while (!cards().some((x) => x.dataset.entryId === id))
-        fireEvent.click(screen.getByRole("button", { name: /Show more/ }));
-      const card = cards().find((x) => x.dataset.entryId === id)!;
-      fireEvent.click(card.querySelector("button") ?? card);
-      expect(params().get("entry")).toBe(id);
-      const list = await within(document.body).findByRole("list", {
-        name: "Citations",
-      });
-      expect(requested().filter((u) => u.includes("/books/"))).toEqual([
-        `/library-data/v1.3.0/books/${book}.json`,
-      ]);
-      return list.textContent;
-    };
-    expect(await openFromIndex("B018", "B018-001")).toBe(
-      "Book p. unnumbered · PDF p. 1 · Military byline",
-    );
-    // B018: PDF page is printed page + 1.
-    expect(await openFromIndex("B018", "B018-038")).toBe(
-      "Book p. 62 · PDF p. 63 · Weapons, cover and engagement",
-    );
-    let d = dialog();
-    expect(d.textContent).toMatch(/Needs review — not approved instructions/);
-    expect(d.textContent).toMatch(/Operational details omitted/);
-    expect(
-      within(d).getByRole("list", { name: "Safety flags" }).textContent,
-    ).toMatch(/unsafe force risk/);
-    expect(await openFromIndex("B019", "B019-001")).toBe(
-      "Book p. unnumbered · PDF p. 1 · Cover and contents mismatch",
-    );
-    // B019: PDF page is printed page - 1.
-    expect(await openFromIndex("B019", "B019-008")).toBe(
-      "Book p. 16 · PDF p. 15 · Cherry tomato canning",
-    );
-    d = dialog();
-    expect(d.textContent).toMatch(/Needs review — not approved instructions/);
-    expect(d.textContent).toMatch(/tested process/);
-    expect(await openFromIndex("B019", "B019-042")).toBe(
-      "Book p. 53–54 · PDF p. 52–53 · Wild leek identification",
-    );
-    expect(dialog().textContent).toMatch(/False hellebore/);
-  });
-
-  it("keeps B009 front matter unnumbered and B010 printed/PDF pages apart", async () => {
-    open("/library/?view=reviews&entry=B009-002");
-    const front = await within(document.body).findByRole("list", {
-      name: "Citations",
-    });
-    expect(front.textContent).toBe(
-      "Book p. unnumbered · PDF p. 2–4 · Contents: six numbered chapters",
-    );
-    cleanup();
-    open("/library/?view=reviews&entry=B010-033");
-    const phone = await within(document.body).findByRole("list", {
-      name: "Citations",
-    });
-    expect(phone.textContent).toBe(
-      "Book p. 20 · PDF p. 21 · Phone-call shielding check",
-    );
-    const d = dialog();
-    // The source's own limitation stays visible with its review status.
-    expect(d.textContent).toMatch(/Needs review — not approved instructions/);
-    expect(d.textContent).toMatch(/not a perfect EMP test/);
-    expect(
-      within(d)
-        .getByRole("list", { name: "Source components" })
-        .closest("details")!.open,
-    ).toBe(false);
-  });
-
-  it("shows B015's conflicting tourniquet records separately, with their labels", async () => {
-    open("/library/?view=reviews&entry=B015-192");
-    const early = await within(document.body).findByRole("list", {
-      name: "Citations",
-    });
-    expect(early.textContent).toBe(
-      "Book p. 58 · PDF p. 58 · Loosen tourniquet every ten minutes",
-    );
-    let d = dialog();
-    expect(d.textContent).toMatch(/Needs review — not approved instructions/);
-    expect(d.textContent).toMatch(
-      /Page92later contradicts this; both retained/,
-    );
-    expect(
-      within(d).getByRole("list", { name: "Safety flags" }).textContent,
-    ).toMatch(/unsafe tourniquet release/);
-    expect(
-      within(d)
-        .getByRole("list", { name: "Source components" })
-        .closest("details")!.open,
-    ).toBe(false);
-    cleanup();
-    open("/library/?view=reviews&entry=B015-289");
-    const later = await within(document.body).findByRole("list", {
-      name: "Citations",
-    });
-    expect(later.textContent).toMatch(/^Book p\. 92 · PDF p\. 92/);
-    d = dialog();
-    expect(d.textContent).toMatch(/Verified principle — limited scope/);
-    expect(d.textContent).toMatch(/Contradicts page58/);
-  });
-
-  it("keeps the unsafe ORS record as needs review and the editorial CH21 unrenumbered", async () => {
-    open("/library/?view=reviews&entry=B015-276");
-    await within(document.body).findByRole("list", { name: "Citations" });
-    let d = dialog();
-    expect(d.textContent).toMatch(/Needs review — not approved instructions/);
-    expect(d.textContent).toMatch(/Unsafe\/incomplete concentration/);
-    cleanup();
-    // The second "Chapter 20" is shown as the source labels it, never as 21.
-    open("/library/?view=reviews&entry=B015-339");
-    await within(document.body).findByRole("list", { name: "Citations" });
-    d = dialog();
-    expect(d.textContent).toMatch(/source Chapter20\(second\)/);
-    expect(d.textContent).not.toMatch(/Chapter 21/);
-    cleanup();
-    open("/library/?view=reviews&entry=B014-215");
-    const last = await within(document.body).findByRole("list", {
-      name: "Citations",
-    });
-    expect(last.textContent).toMatch(/^Book p\. 51 · PDF p\. 52/);
-    expect(dialog().textContent).toMatch(/A Final Word — unnumbered/);
-    expect(dialog().textContent).not.toMatch(/Chapter 11/);
-  });
-
-  it("shows B013's printed frequency error with its correction", async () => {
-    open("/library/?view=reviews&entry=B013-140");
-    await within(document.body).findByRole("heading", { name: "Corrections" });
-    const d = dialog();
-    expect(d.textContent).toMatch(/FRS frequencies,power and channel3 typo/);
-    expect(d.textContent).toMatch(/462\.6125MHz/);
-    expect(d.textContent).toMatch(/B013:C05/);
-  });
-
-  it("shows B010's armed-retaking passage only as a high-level reference", async () => {
-    open("/library/?view=reviews&entry=B010-076");
-    await within(document.body).findByRole("list", { name: "Citations" });
-    const d = dialog();
-    expect(d.textContent).toMatch(/Armed retaking and harassment proposal/);
-    expect(d.textContent).toMatch(/Needs review — not approved instructions/);
-    expect(within(d).queryByRole("list", { name: "Source components" })).toBe(
-      null,
-    );
-  });
-
-  it("shows unnumbered and mixed page citations exactly", async () => {
-    open("/library/?view=reviews&entry=B006-001");
-    const list = await within(document.body).findByRole("list", {
-      name: "Citations",
-    });
-    expect(list.textContent).toBe("Book p. unnumbered · PDF p. 1 · Overview");
-    cleanup();
-    open("/library/?view=reviews&entry=B007-001");
-    const mixed = await within(document.body).findByRole("list", {
-      name: "Citations",
-    });
-    expect(mixed.textContent).toBe(
-      "Book p. unnumbered–1 · PDF p. 1–2 · Front matter",
-    );
-  });
-
-  it("resolves evidence within the entry's own book namespace", async () => {
-    open("/library/?view=reviews&entry=B005-008");
-    await within(document.body).findByRole("heading", { name: "Evidence" });
-    const d = dialog();
-    expect(d.textContent).toMatch(/B005:E01/);
-    expect(d.textContent).toMatch(
-      /An essential guide to building an emergency fund/,
-    );
-    expect(d.textContent).not.toMatch(
-      /How to Create an Emergency Water Supply/,
-    );
-  });
-
-  it("shows a verified principle's scope limits and verification date", async () => {
-    open("/library/?view=reviews&entry=B001-008");
-    await within(document.body).findByRole("heading", {
-      name: "Reviewed guidance",
-    });
-    const d = dialog();
-    expect(d.textContent).toMatch(/Verified principle — limited scope/);
-    expect(d.textContent).toMatch(/doesn’t approve the book’s original/);
-    expect(d.textContent).toMatch(/Verified Oct 30, 2026/);
-  });
-
-  it("keeps nested source components, labeled, inside the collapsed section", async () => {
-    open("/library/?view=reviews&entry=B007-009");
-    const comps = await within(document.body).findByRole("list", {
-      name: "Source components",
-    });
-    expect(comps.closest("details")!.open).toBe(false);
-    expect(within(comps).getAllByRole("listitem")).toHaveLength(13);
-    expect(comps.textContent).toMatch(/Materials needed:/);
-  });
-
-  it("retries a failed book detail load without showing other content", async () => {
-    let fail = true;
-    override = (url) =>
-      fail && url.endsWith("B001.json")
-        ? new Response("x", { status: 503 })
-        : undefined;
-    open("/library/?view=reviews&entry=B001-027");
-    const alert = await within(document.body).findByRole("alert");
-    expect(alert.textContent).toMatch(/Couldn’t load the book.*503/);
-    expect(dialog().textContent).not.toMatch(/Reviewed guidance/);
-    fail = false;
-    fireEvent.click(within(dialog()).getByRole("button", { name: "Retry" }));
-    await within(document.body).findByRole("heading", {
-      name: "Reviewed guidance",
-    });
-  });
-
-  it("never shows a slow, previously selected book under the current entry", async () => {
-    let releaseB002!: () => void;
-    const gate = new Promise<void>((r) => (releaseB002 = r));
-    override = async (url) => {
-      if (!url.endsWith("B002.json")) return undefined;
-      await gate;
-      return new Response(file(url), { status: 200 });
-    };
-    const b002 = JSON.parse(
-      file("/library-data/v1.3.0/reviews-index.json"),
-    ).entries.find((e: { source_id: string }) => e.source_id === "B002");
-    open(`/library/?view=reviews&entry=${b002.id}`);
-    await within(document.body).findByText(/Loading the full review/);
-    // Switch to a B001 entry before B002 arrives.
-    await popstate(() =>
-      window.history.replaceState(
-        null,
-        "",
-        "/library/?view=reviews&entry=B001-027",
-      ),
-    );
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await within(document.body).findByText("Bleach treatment");
-    await act(async () => {
-      releaseB002();
-      await new Promise((r) => setTimeout(r, 20));
-    });
-    expect(
-      screen.getByRole("heading", { name: "Bleach dose and contact time" }),
-    ).toBeTruthy();
-    expect(dialog().textContent).toMatch(/Bleach treatment/);
-    expect(dialog().textContent).not.toContain(b002.title);
+    await screen.findByText(ALL);
+    expect(requested()).toEqual([GUIDANCE_URL]);
   });
 });
 
 describe("Library is read-only", () => {
-  it("imports no household, Firestore or readiness modules", () => {
+  it("keeps Library browsing free of writes and readiness mutations", () => {
     const dirs = [
       "src/lib/library",
       "src/components/library",
@@ -701,17 +447,15 @@ describe("Library is read-only", () => {
       )) {
         const src = readFileSync(`${dir}/${f}`, "utf8");
         expect(src, f).not.toMatch(
-          /firebase|@\/lib\/(data|hooks|readiness|requirements|goals|tasks|inventory|seed|checklist|objective|household)\b|SessionProvider/,
+          /\b(addDoc|setDoc|updateDoc|deleteDoc|runTransaction|writeBatch|seedHousehold|createLibraryTask)\s*\(/,
         );
       }
   });
 
-  it("makes only GET requests for the static pack while browsing", async () => {
-    open("/library/?view=reviews&entry=B001-027");
-    await within(document.body).findByText("Bleach treatment");
-    expect(
-      requested().every((u) => u.startsWith("/library-data/v1.3.0/")),
-    ).toBe(true);
+  it("makes only GET requests for the guidance file while browsing", async () => {
+    open("/library/?entry=HP-C02");
+    await within(document.body).findByTestId("library-actions");
+    expect(requested()).toEqual([GUIDANCE_URL]);
     expect(window.localStorage.length).toBe(0);
   });
 });

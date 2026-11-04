@@ -1,0 +1,41 @@
+{
+  "manifest_version": "1.0.0",
+  "bundle_version": "1.4.0",
+  "packaged_on": "2026-11-04",
+  "previous_version": "1.3.0",
+  "files": [
+    {
+      "path": "runtime/guidance.json",
+      "bytes": 108096,
+      "sha256": "a260a5ce24967b7e57d0b5a592c45ca3c49ce7937bef22e03184398c52facb5e"
+    }
+  ],
+  "inputs": [
+    {
+      "path": "public/library-data/v1.3.0/guidance.json",
+      "bytes": 92927,
+      "sha256": "045e9a5ec076d6040637bf6e7ba7a2527d51798e703dfdefcfd07d8ebc332572"
+    },
+    {
+      "path": "data/library/v1.4.0/shelter-cards.json",
+      "bytes": 11281,
+      "sha256": "9c5533db727baf143eab78e5e880f85e783efdbcf2f176ae65be02d7e6de7f56"
+    }
+  ],
+  "totals": {
+    "authoritative_core_entries": 27,
+    "added_entries": [
+      "HP-H01",
+      "HP-H02",
+      "HP-H03"
+    ],
+    "topics": 12,
+    "evidence_records": 23,
+    "book_review_entries_published": 0
+  },
+  "runtime_loading": {
+    "base_path": "/library-data/v1.4.0/",
+    "initial": "runtime/guidance.json",
+    "note": "Guidance is the only published Library payload. Book reviews from every content version are kept privately under data/library/v*/runtime/ and are not served."
+  }
+}

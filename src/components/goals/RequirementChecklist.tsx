@@ -2,6 +2,7 @@
 
 import {
   Ban,
+  BookOpen,
   ChevronDown,
   Pencil,
   Plus,
@@ -50,6 +51,8 @@ import {
   type RequirementStatus,
 } from "@/lib/checklist";
 import { updateRequirement } from "@/lib/goals";
+import { cardUrl } from "@/lib/library/actions";
+import type { GoalDraft } from "@/lib/library-drafts";
 import { displayNameOf } from "@/lib/household";
 import { describeQuantity } from "@/lib/quantities";
 import { usable, type Essential } from "@/lib/readiness";
@@ -132,11 +135,18 @@ export function RequirementChecklist({
   essential: e,
   open,
   onToggle,
+  draft = null,
+  draftNote = null,
+  onDraftDone,
   ...actions
 }: RowActions & {
   essential: Essential;
   open: ReadonlySet<string>;
   onToggle: (id: string) => void;
+  /** A Library card's goal draft: opens New Goal prefilled (unsaved). */
+  draft?: GoalDraft | null;
+  draftNote?: string | null;
+  onDraftDone?: () => void;
 }) {
   const { core, supporting } = e.checklist;
   const coreRows = e.checklist.requirements.filter(
@@ -192,8 +202,16 @@ export function RequirementChecklist({
           </ul>
         </>
       )}
+      {draftNote && (
+        <p role="status" className="mt-2 text-xs text-sage">
+          {draftNote}
+        </p>
+      )}
       <NewGoal
+        key={draft?.libraryEntryId ?? "new"}
         essential={e}
+        draft={draft}
+        onDraftDone={onDraftDone}
         items={actions.items}
         tasks={actions.tasks}
         related={actions.related}
@@ -404,6 +422,18 @@ function RequirementRow({
                 <p className="whitespace-pre-line text-sage">
                   <span className="text-slate">Notes: </span>
                   {r.record.notes}
+                </p>
+              )}
+              {r.record?.custom?.libraryEntryId && (
+                <p className="flex items-center gap-1.5 text-sage">
+                  <BookOpen size={13} aria-hidden />
+                  Drafted from a Library card:{" "}
+                  <Link
+                    href={cardUrl(r.record.custom.libraryEntryId)}
+                    className="text-copper-light hover:underline"
+                  >
+                    open it in the Library
+                  </Link>
                 </p>
               )}
             </>
@@ -845,13 +875,15 @@ function CustomizeForm({
  * Create or edit a household goal within the selected goal and milestone —
  * both come from context, so they are never asked for again.
  */
-function GoalForm({
+export function GoalForm({
   essential: e,
   items,
   tasks,
   related,
   today,
   existing,
+  prefill,
+  blocked,
   onDone,
 }: {
   essential: Essential;
@@ -860,18 +892,25 @@ function GoalForm({
   related: Task[];
   today: string;
   existing?: EvaluatedRequirement;
+  /** Starting values for a new goal (a Library draft). */
+  prefill?: GoalDraft | null;
+  blocked?: string | null;
   onDone: () => void;
 }) {
   const { household } = useHousehold();
   const c = existing?.record?.custom;
-  const [title, setTitle] = useState(c?.title ?? "");
-  const [explanation, setExplanation] = useState(c?.explanation ?? "");
+  const [title, setTitle] = useState(c?.title ?? prefill?.title ?? "");
+  const [explanation, setExplanation] = useState(
+    c?.explanation ?? prefill?.explanation ?? "",
+  );
   const [method, setMethod] = useState<"confirm" | "task">(
     c?.method ?? "confirm",
   );
   const [taskId, setTaskId] = useState(c?.taskId ?? "");
   const [inventoryId, setInventoryId] = useState("");
-  const [notes, setNotesText] = useState(existing?.record?.notes ?? "");
+  const [notes, setNotesText] = useState(
+    existing?.record?.notes ?? prefill?.notes ?? "",
+  );
   const { busy, error, run } = useChange();
 
   // The goal's related tasks first, then the rest of this milestone's.
@@ -881,12 +920,17 @@ function GoalForm({
 
   async function submit(ev: FormEvent) {
     ev.preventDefault();
-    if (busy) return;
+    if (busy || blocked) return;
     const options: CustomOptions = {
       method,
       taskId: taskId || null,
       notes,
-      ...(existing ? {} : { inventoryId: inventoryId || null }),
+      ...(existing
+        ? {}
+        : {
+            inventoryId: inventoryId || null,
+            libraryEntryId: prefill?.libraryEntryId ?? null,
+          }),
     };
     const ok = existing
       ? await run(existing.id, () => editCustom(title, explanation, options))
@@ -910,6 +954,11 @@ function GoalForm({
       className="space-y-2"
       aria-label={existing ? "Edit goal" : "New goal"}
     >
+      {blocked && (
+        <p role="alert" className="text-sm text-amber">
+          {blocked}
+        </p>
+      )}
       <Field label="Goal title">
         <Input
           value={title}
@@ -998,7 +1047,7 @@ function GoalForm({
           variant="emerald"
           icon={Save}
           loading={busy}
-          disabled={!title.trim()}
+          disabled={!!blocked || !title.trim()}
         >
           Save goal
         </Button>
@@ -1013,15 +1062,23 @@ function GoalForm({
 
 function NewGoal({
   essential: e,
+  draft,
+  onDraftDone,
   ...rest
 }: {
   essential: Essential;
+  draft: GoalDraft | null;
+  onDraftDone?: () => void;
   items: InventoryItem[];
   tasks: Task[];
   related: Task[];
   today: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!draft);
+  const close = () => {
+    setOpen(false);
+    if (draft) onDraftDone?.();
+  };
   if (!open) {
     return (
       <Button
@@ -1040,7 +1097,20 @@ function NewGoal({
       <p className="mb-2 text-[11px] text-slate">
         New goal for {e.label} · counts toward this goal’s progress.
       </p>
-      <GoalForm essential={e} {...rest} onDone={() => setOpen(false)} />
+      {draft && (
+        <p className="mb-2 text-xs text-sage">
+          Drafted from the Library card{" "}
+          <Link
+            href={cardUrl(draft.libraryEntryId)}
+            className="text-copper-light hover:underline"
+          >
+            {draft.title}
+          </Link>
+          . Review and edit before saving; nothing is saved until you do, and it
+          isn’t complete until your household completes it.
+        </p>
+      )}
+      <GoalForm essential={e} {...rest} prefill={draft} onDone={close} />
     </div>
   );
 }

@@ -152,6 +152,9 @@ const toQuery = (t: ColRef | Query): Query =>
 export const firestoreModule = {
   Timestamp: FakeTimestamp,
   getFirestore: () => DB,
+  getDocs: async (ref: ColRef | Query) => ({
+    docs: collectionDocs(toQuery(ref)),
+  }),
   serverTimestamp: () => SERVER_TS,
   increment: (n: number) => new Increment(n),
   writeBatch: () => {
@@ -285,13 +288,24 @@ export const firestoreModule = {
       delete: (r: DocRef) => void;
     }) => Promise<T>,
   ): Promise<T> => {
+    const reads = new Map<string, string | undefined>();
     const writes: (() => void)[] = [];
     const result = await fn({
-      get: async (ref) => docSnapshot(ref.path),
+      get: async (ref) => {
+        reads.set(ref.path, JSON.stringify(store.get(ref.path)));
+        return docSnapshot(ref.path);
+      },
       set: (ref, d) => writes.push(() => store.set(ref.path, resolve(d))),
       update: (ref, d) => writes.push(() => update(ref.path, d)),
       delete: (ref) => writes.push(() => store.delete(ref.path)),
     });
+    if (
+      [...reads].some(
+        ([path, value]) => JSON.stringify(store.get(path)) !== value,
+      )
+    ) {
+      return firestoreModule.runTransaction(_db, fn);
+    }
     consumeFailure("commit");
     const before = new Map(store);
     try {

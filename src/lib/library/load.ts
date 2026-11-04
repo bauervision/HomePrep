@@ -1,30 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  detailUrl,
-  LibraryDataError,
-  parseBookDetail,
-  parseGuidance,
-  parseReviewsIndex,
-} from "./validate";
-import {
-  LIBRARY_VERSION,
-  type BookDetail,
-  type GuidancePack,
-  type ReviewsIndex,
-} from "./types";
+import { LibraryDataError, parseGuidance } from "./validate";
+import { LIBRARY_VERSION, type GuidancePack } from "./types";
 
 /*
- * Loads the versioned static Library pack. Only the file needed now is
- * fetched: guidance on entry, the review index on entering Book reviews, and
- * one book's details when opening one of its entries. The 8 MB canonical
- * bundle is never requested by the app.
+ * Loads the versioned static Library guidance. It is the only published
+ * Library payload; book reviews stay in the private research archive.
  */
 
 export const LIBRARY_BASE = `/library-data/v${LIBRARY_VERSION}/`;
 export const GUIDANCE_URL = `${LIBRARY_BASE}guidance.json`;
-export const INDEX_URL = `${LIBRARY_BASE}reviews-index.json`;
 
 export class LibraryLoadError extends Error {
   constructor(message: string) {
@@ -74,8 +60,7 @@ type Settled<T> = {
 
 /**
  * Loads `url` (null = not needed yet). The returned state always belongs to
- * the current `url`: a slow response for a previous URL is discarded, so one
- * book's details can never appear under another entry.
+ * the current `url`: a slow response for a previous URL is discarded.
  */
 export function useLibraryFile<T>(
   url: string | null,
@@ -121,38 +106,3 @@ export function useLibraryFile<T>(
 
 export const useGuidance = (enabled = true) =>
   useLibraryFile<GuidancePack>(enabled ? GUIDANCE_URL : null, parseGuidance);
-
-export const useReviewsIndex = (enabled: boolean) =>
-  useLibraryFile<ReviewsIndex>(enabled ? INDEX_URL : null, parseReviewsIndex);
-
-const bookParsers = new Map<string, (raw: unknown) => BookDetail>();
-/** A stable parser per source, so the hook doesn't refetch on re-render. */
-function bookParser(sourceId: string) {
-  let p = bookParsers.get(sourceId);
-  if (!p) {
-    p = (raw) => parseBookDetail(raw, sourceId);
-    bookParsers.set(sourceId, p);
-  }
-  return p;
-}
-
-/** One book's details; `detailPath` comes from the review index. */
-export function useBookDetail(
-  sourceId: string | null,
-  detailPath: string | null,
-) {
-  let url: string | null = null;
-  try {
-    url = sourceId && detailPath ? detailUrl(LIBRARY_BASE, detailPath) : null;
-  } catch {
-    url = null;
-  }
-  return useLibraryFile<BookDetail>(
-    url,
-    sourceId ? bookParser(sourceId) : parseNothing,
-  );
-}
-
-const parseNothing = (): BookDetail => {
-  throw new LibraryDataError("No book selected.");
-};

@@ -479,7 +479,12 @@ export interface CustomOptions {
   /** Inventory record to link as evidence when the goal is created. */
   inventoryId?: string | null;
   notes?: string;
+  /** Library card the goal was drafted from (creation only). */
+  libraryEntryId?: string | null;
 }
+
+/** Library card IDs as published (e.g. `HP-C02`). */
+const LIBRARY_ENTRY_ID = /^[A-Za-z0-9_-]{1,32}$/;
 
 function checkNotes(notes: string) {
   if (notes.length > MAX_EXPLANATION)
@@ -604,6 +609,9 @@ export function createCustom(
   const notes = (options.notes ?? "").trim();
   checkNotes(notes);
   const link = customLink(options);
+  const libraryEntryId = options.libraryEntryId || undefined;
+  if (libraryEntryId && !LIBRARY_ENTRY_ID.test(libraryEntryId))
+    throw new Error("Unrecognized Library card.");
   const count = Object.values(state ?? {}).filter((r) => r.custom).length;
   if (count >= MAX_CUSTOM)
     throw new Error(
@@ -617,6 +625,7 @@ export function createCustom(
       explanation: e,
       createdAt: at,
       ...link,
+      ...(libraryEntryId ? { libraryEntryId } : {}),
     },
     ...(options.inventoryId ? { inventoryIds: [options.inventoryId] } : {}),
     ...(notes ? { notes } : {}),

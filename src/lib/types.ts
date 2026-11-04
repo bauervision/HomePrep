@@ -72,6 +72,8 @@ export interface RequirementRecord {
      * task    — done when the linked task is complete (no checkbox)
      */
     method?: "confirm" | "task";
+    /** Library card this goal was drafted from (links back to it). */
+    libraryEntryId?: string;
   };
   /** Household wording for a system recommendation (original kept in code). */
   text?: { title?: string; explanation?: string };
@@ -244,6 +246,8 @@ export interface Task {
   templateVersion?: number;
   /** Note this task was created from, if any (may point to a deleted note). */
   sourceNoteId?: string;
+  /** Library card this task was drafted from (links back to it). */
+  libraryEntryId?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }

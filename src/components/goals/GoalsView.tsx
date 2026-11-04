@@ -18,7 +18,10 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { RequirementChecklist } from "@/components/goals/RequirementChecklist";
+import {
+  GoalForm,
+  RequirementChecklist,
+} from "@/components/goals/RequirementChecklist";
 import { InventoryItemForm } from "@/components/InventoryItemForm";
 import { useHousehold } from "@/components/SessionProvider";
 import { TaskForm } from "@/components/TaskForm";
@@ -44,6 +47,9 @@ import {
   relatedTasks,
   saveTargetOverride,
 } from "@/lib/goals";
+import { TOPIC_GOAL } from "@/lib/library/actions";
+import { useGuidance } from "@/lib/library/load";
+import { goalDraftFromCard, type GoalDraft } from "@/lib/library-drafts";
 import { useObjective } from "@/lib/objective";
 import { describeMembers, householdPlan, resolveProfile } from "@/lib/profile";
 import { describeQuantity } from "@/lib/quantities";
@@ -125,6 +131,22 @@ export function GoalsView({
   const m = params.get("milestone");
   const milestone: MilestoneKey = isMilestoneKey(m) ? m : viewerObjective;
   const requested = params.get("goal");
+  // Deep links from the Library: a requirement to open, or a card to draft a
+  // new goal from (nothing is saved until the household saves the form).
+  const focusRequirement = params.get("requirement");
+  const draftId = params.get("draft");
+  const guidance = useGuidance(!!draftId);
+  const card = draftId
+    ? guidance.data?.entries.find((x) => x.id === draftId)
+    : undefined;
+  const draft = useMemo(() => (card ? goalDraftFromCard(card) : null), [card]);
+  const draftNote = !draftId
+    ? null
+    : guidance.status === "error"
+      ? guidance.error
+      : guidance.status === "ready" && !card
+        ? "That Library card isn’t available, so there’s nothing to draft."
+        : null;
   const plan = useMemo(() => householdPlan(household), [household]);
   const profile = useMemo(() => resolveProfile(household), [household]);
 
@@ -132,6 +154,15 @@ export function GoalsView({
     () => objectiveEssentials(milestone, inv.data, tasks.data, plan, today),
     [milestone, inv.data, tasks.data, plan, today],
   );
+  const intendedGoal = card?.topic_ids.map((t) => TOPIC_GOAL[t]).find(Boolean);
+  const draftDestination = essentials.find((e) => e.key === intendedGoal);
+  const originalDestination = objectiveEssentials(
+    "72h",
+    inv.data,
+    tasks.data,
+    plan,
+    today,
+  ).find((e) => e.key === intendedGoal);
   const memoryKey = lastGoalKey(user.uid, household.id, milestone);
   const remembered =
     typeof window === "undefined" ? null : readLastGoal(memoryKey);
@@ -183,6 +214,58 @@ export function GoalsView({
         }
       />
       <ErrorText>{inv.error || tasks.error}</ErrorText>
+      {draftNote && <p role="status">{draftNote}</p>}
+      {draft && originalDestination && (
+        <Card title="New goal from the Library">
+          <p className="mb-2 text-xs text-sage">
+            Drafted from the Library card {draft.title}. Review before saving.
+          </p>
+          <p className="mb-2 text-xs text-sage">
+            Destination: {draftDestination?.label ?? originalDestination.label}{" "}
+            · {ms.label}
+          </p>
+          {!draftDestination && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              <Button
+                onClick={() =>
+                  setParams({ milestone: "72h", goal: intendedGoal! })
+                }
+              >
+                Return to 72-hour {originalDestination.label}
+              </Button>
+              {OBJECTIVE_ESSENTIALS["7d"].some(
+                (e) => e.key === intendedGoal,
+              ) && (
+                <Button
+                  onClick={() =>
+                    setParams({ milestone: "7d", goal: intendedGoal! })
+                  }
+                >
+                  Use 7-day {originalDestination.label}
+                </Button>
+              )}
+            </div>
+          )}
+          <GoalForm
+            key={draft.libraryEntryId}
+            essential={draftDestination ?? originalDestination}
+            blocked={
+              !draftDestination
+                ? "This milestone has no compatible destination for this Library card. Return to 72 hours to save in its intended category."
+                : null
+            }
+            prefill={draft}
+            items={inv.data}
+            tasks={tasks.data}
+            related={relatedTasks(
+              draftDestination ?? originalDestination,
+              tasks.data,
+            )}
+            today={today}
+            onDone={() => setParams({ draft: null })}
+          />
+        </Card>
+      )}
       {inv.loading || tasks.loading ? (
         <Empty>Loading…</Empty>
       ) : (
@@ -241,6 +324,10 @@ export function GoalsView({
               <GoalDetail
                 key={`${milestone}:${selected.key}`}
                 essential={selected}
+                focusRequirement={focusRequirement}
+                draft={null}
+                draftNote={null}
+                onDraftDone={() => setParams({ draft: null })}
                 items={inv.data}
                 tasks={tasks.data}
                 memberCount={profile.memberCount}
@@ -493,7 +580,15 @@ function GoalDetail({
   memberCount,
   members,
   today,
+  focusRequirement,
+  draft,
+  draftNote,
+  onDraftDone,
 }: {
+  focusRequirement: string | null;
+  draft: GoalDraft | null;
+  draftNote: string | null;
+  onDraftDone: () => void;
   essential: Essential;
   items: InventoryItem[];
   tasks: Task[];
@@ -509,10 +604,21 @@ function GoalDetail({
   const action = planAction(e.checklist, e.status);
 
   // The quantity target starts open: it is the heart of Water and Food.
+  // A requirement deep link (e.g. "View existing goal" in the Library) opens
+  // and focuses that requirement.
+  const linked = e.checklist.requirements.some((r) => r.id === focusRequirement)
+    ? focusRequirement
+    : null;
   const [open, setOpen] = useState<ReadonlySet<string>>(
-    () => new Set(quantityId ? [quantityId] : []),
+    () =>
+      new Set([
+        ...(quantityId ? [quantityId] : []),
+        ...(linked ? [linked] : []),
+      ]),
   );
-  const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(null);
+  const [focusTarget, setFocusTarget] = useState<{ id: string } | null>(() =>
+    linked ? { id: `req-toggle-${linked}` } : null,
+  );
   const [reviewing, setReviewing] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [adding, setAdding] = useState<Category | null>(null);
@@ -630,6 +736,9 @@ function GoalDetail({
           today={today}
           open={open}
           onToggle={toggle}
+          draft={draft}
+          draftNote={draftNote}
+          onDraftDone={onDraftDone}
           onOpenTask={setTaskId}
           onAddItem={setAdding}
           renderQuantity={() =>

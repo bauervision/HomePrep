@@ -19,7 +19,7 @@ import type { Category, MilestoneKey } from "./types";
  * definition records the version that introduced it (`since`) and, when its
  * completion rules changed later, the version of that revision (`revised`).
  */
-export const BASELINE_VERSION = 2;
+export const BASELINE_VERSION = 3;
 
 /** Date the official pages below were last read and checked. */
 export const SOURCES_REVIEWED = "2026-10-31";
@@ -95,6 +95,15 @@ export const SOURCES = {
     "https://www.cdc.gov/carbon-monoxide/",
     "2026-10-26",
   ),
+  cdcConnected: {
+    ...gov(
+      "Stay Connected",
+      "CDC",
+      "https://www.cdc.gov/prepare-your-health/plan-ahead/stay-connected.html",
+      "2024-04-18",
+    ),
+    reviewed: "2026-11-04",
+  },
 } satisfies Record<string, SourceRef>;
 export type SourceId = keyof typeof SOURCES;
 
@@ -504,13 +513,18 @@ const COMMS_72: Def[] = [
     goal: "comms",
     title: "Agree how you’ll reach each other",
     explanation:
-      "Know how you’ll contact one another and reconnect if separated — for example, a backup method if calls don’t go through.",
-    action: "Agree on the methods with your household, then confirm.",
+      "Know how you’ll contact one another and reconnect if separated. Agree on a backup method if calls don’t go through (texts often get through when calls don’t), and at least two accessible meeting places with a route to each. Note who needs to be picked up or helped, and what you’ll do if a place or route is unsafe.",
+    action:
+      "Record the plan (this requirement’s notes work) and make sure everyone in your household knows it, then confirm.",
     basis: "planning",
     level: "core",
     completion: any(attest),
-    sources: ["readyPlan"],
-    evidence: "official",
+    revised: {
+      version: 3,
+      note: "Now also covers two accessible meeting places and routes, pickup or assistance needs, and what to do if a place or route is unsafe. Record the plan and confirm everyone knows it.",
+    },
+    sources: ["readyPlan", "cdcConnected"],
+    evidence: "derived",
   },
 ];
 

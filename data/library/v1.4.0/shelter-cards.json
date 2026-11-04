@@ -1,0 +1,223 @@
+{
+  "description": "Shelter topic and core cards added in Library content 1.4.0. Each card was checked against the cited official pages on 2026-11-04; page_last_updated is the date each page showed when read. Household wording and sequencing are HomePrep editorial applications.",
+  "reviewed_on": "2026-11-04",
+  "topic": {
+    "id": "shelter",
+    "label": "Shelter",
+    "after": "communications",
+    "source_prefixes": ["shelter", "evacuation"],
+    "aliases": [
+      "shelter",
+      "evacuate",
+      "evacuation",
+      "tornado",
+      "flood",
+      "safe room",
+      "basement",
+      "destination",
+      "leave"
+    ]
+  },
+  "evidence": [
+    {
+      "id": "A19",
+      "publisher": "FEMA / Ready.gov",
+      "title": "Tornadoes",
+      "url": "https://www.ready.gov/tornadoes",
+      "page_last_updated": "2026-06-02",
+      "locator": "Before a Tornado; During a Tornado; If You Are Under A Tornado or Severe Weather Warning",
+      "support_scope": "Safe room or ICC 500 storm shelter; next best a small, interior, windowless room or basement on the lowest level of a sturdy building; stay away from windows, doors and outside walls; go to a public shelter if you can't stay at home."
+    },
+    {
+      "id": "A20",
+      "publisher": "FEMA / Ready.gov",
+      "title": "Floods",
+      "url": "https://www.ready.gov/floods",
+      "page_last_updated": "2026-10-20",
+      "locator": "If you are under a flood warning; During a Flood",
+      "support_scope": "Depending on the type of flooding: evacuate if told to, move to higher ground or a higher floor, or stay where you are; evacuate immediately if told to; never drive around barricades; don't walk, swim or drive through flood waters; if trapped in a building go to the highest level, not a closed attic."
+    },
+    {
+      "id": "A21",
+      "publisher": "FEMA / Ready.gov",
+      "title": "Shelter",
+      "url": "https://www.ready.gov/shelter",
+      "page_last_updated": "2026-09-24",
+      "locator": "Introduction; Mass Care Shelter; Sheltering in Place",
+      "support_scope": "Stay informed and follow local authorities; shelter in place when there is a lot of debris in the air or authorities say the air is badly contaminated; take your emergency supply kit; all shelters accept service animals but many public shelters and hotels do not allow pets; text SHELTER and your ZIP code to 43362 to find open shelters."
+    },
+    {
+      "id": "A22",
+      "publisher": "FEMA / Ready.gov",
+      "title": "Evacuation",
+      "url": "https://www.ready.gov/evacuation",
+      "page_last_updated": "2026-03-20",
+      "locator": "Know When and Where to Go; Before, During and After an Evacuation",
+      "support_scope": "Follow the instructions of local officials; know your destination; identify several places in different directions; alternate routes and transportation, including without a car; leave early enough to avoid being trapped; follow recommended routes; don't drive into flooded areas; check on neighbors who may need a ride; check with officials before returning."
+    },
+    {
+      "id": "A23",
+      "publisher": "FEMA / Ready.gov",
+      "title": "People with Disabilities",
+      "url": "https://www.ready.gov/disability",
+      "page_last_updated": "2026-09-09",
+      "locator": "Make a Plan",
+      "support_scope": "Plan accessible transportation for evacuation with local transit and emergency management; voluntary registries kept by local emergency management; a support network and contact list; plan how to evacuate with assistive devices; know whether a shelter allows pets or only service animals."
+    }
+  ],
+  "cards": [
+    {
+      "id": "HP-H01",
+      "title": "Choose where to shelter for each hazard",
+      "when_to_use": "Before a warning, for each hazard that can affect your home",
+      "search_terms": [
+        "shelter",
+        "tornado",
+        "flood",
+        "safe room",
+        "basement",
+        "shelter in place",
+        "interior room"
+      ],
+      "prerequisites": [
+        "Know which hazards, such as tornadoes or floods, can affect where you live"
+      ],
+      "steps": [
+        "Tornado or severe wind warning: go to a safe room or storm shelter if you have one. Otherwise use a small, interior, windowless room or basement on the lowest level of a sturdy building, away from windows, doors and outside walls.",
+        "Flood warning: depending on the type of flooding, evacuate if told to, move to higher ground or a higher floor, or stay where you are. Don’t plan to shelter on a level that may flood.",
+        "If rising water traps you in a building, go to the highest level. Don’t climb into a closed attic; get on the roof only if necessary, and signal for help.",
+        "Shelter in place (stay inside where you are) when local authorities say the outside air is badly contaminated, or there is a lot of debris in the air.",
+        "Record the location you chose for each hazard and practice going there."
+      ],
+      "limits": [
+        "The safest place depends on the hazard: a basement suited to a tornado can be the wrong place in a flood.",
+        "If your home has no suitable place, know a public shelter or sturdy building you can reach in time.",
+        "Current instructions from local authorities come before this plan."
+      ],
+      "evidence": [
+        {
+          "source_id": "A19",
+          "relationship": "supports_with_editorial_application",
+          "scope": "Tornado shelter choices and what to stay away from."
+        },
+        {
+          "source_id": "A20",
+          "relationship": "supports_with_editorial_application",
+          "scope": "Flood options depend on the type of flooding; highest level, not a closed attic, if trapped."
+        },
+        {
+          "source_id": "A21",
+          "relationship": "supports_with_editorial_application",
+          "scope": "When sheltering in place applies, and following local authorities."
+        }
+      ],
+      "completion": [
+        "Record a shelter location for each hazard that applies to your home and confirm everyone knows it."
+      ],
+      "maintenance": "Review after a move, a renovation, or learning of a new local hazard.",
+      "escalation": "Follow local warnings and official instructions. Call 911 if you are trapped or in immediate danger.",
+      "site_confirmation_required": true
+    },
+    {
+      "id": "HP-H02",
+      "title": "Arrange an accessible backup place to stay",
+      "when_to_use": "Before you may need to leave home",
+      "search_terms": [
+        "shelter",
+        "evacuation",
+        "destination",
+        "accessible",
+        "disability",
+        "pets",
+        "service animal",
+        "transportation",
+        "backup"
+      ],
+      "prerequisites": [
+        "Each household member’s mobility, medical, equipment and animal needs"
+      ],
+      "steps": [
+        "Identify several places you could go, such as a friend’s or relative’s home in another town or a motel, in different directions.",
+        "Check that each place works for everyone: access for anyone with a mobility need, room for assistive devices and medical equipment, and whether pets are allowed. All shelters accept service animals, but many public shelters and hotels don’t allow pets.",
+        "Plan accessible transportation if anyone needs it, including how you’d leave without a car. Check options with local transit providers and your emergency management agency.",
+        "Ask your local emergency management office whether it keeps a voluntary registry for people with disabilities.",
+        "Share the plan with your support network and keep their contact list with your emergency kit."
+      ],
+      "limits": [
+        "Public shelter spaces can change: check with local officials each year.",
+        "A destination isn’t usable if it’s in the affected area or the route to it is unsafe."
+      ],
+      "evidence": [
+        {
+          "source_id": "A22",
+          "relationship": "supports_with_editorial_application",
+          "scope": "Several destinations in different directions, and transportation without a car."
+        },
+        {
+          "source_id": "A23",
+          "relationship": "supports_with_editorial_application",
+          "scope": "Accessible transportation, voluntary registries, support network and assistive devices."
+        },
+        {
+          "source_id": "A21",
+          "relationship": "supports",
+          "scope": "Service animals and pets at shelters, and finding open shelters."
+        }
+      ],
+      "completion": [
+        "Record at least two destinations in different directions and how each person will get there, and confirm each meets your household’s access needs."
+      ],
+      "maintenance": "Recheck each year, and when someone’s needs, your transportation or a host’s situation changes.",
+      "escalation": "If no planned destination is available, find an open shelter by texting SHELTER and your ZIP code to 43362 (standard rates apply), or follow local officials.",
+      "site_confirmation_required": true
+    },
+    {
+      "id": "HP-H03",
+      "title": "Follow official evacuation instructions",
+      "when_to_use": "When a hazard threatens your area",
+      "search_terms": [
+        "evacuation",
+        "evacuate",
+        "leave",
+        "official instructions",
+        "routes",
+        "flood",
+        "barricades"
+      ],
+      "prerequisites": [
+        "A way to receive local alerts and instructions",
+        "Your destinations and routes"
+      ],
+      "steps": [
+        "Follow the instructions of local officials, and evacuate when they tell you to. In a flood, evacuate immediately if told to.",
+        "Leave early enough to avoid being trapped by severe weather.",
+        "Follow recommended evacuation routes; shortcuts may be blocked. Depending on the disaster, your route may be on foot.",
+        "Don’t walk or drive into flooded areas or around barricades, and watch for washed-out roads or bridges and downed power lines.",
+        "Take your emergency supply kit and your pets, and check on neighbors who may need a ride.",
+        "Before going home, check with local officials both where you’re staying and back home."
+      ],
+      "limits": [
+        "Officials may tell you to stay where you are instead of leaving; follow the instruction for the hazard you face.",
+        "Only service animals may be allowed in public shelters."
+      ],
+      "evidence": [
+        {
+          "source_id": "A22",
+          "relationship": "supports",
+          "scope": "Following local officials, leaving early, routes, road hazards, neighbors and returning home."
+        },
+        {
+          "source_id": "A20",
+          "relationship": "supports",
+          "scope": "Evacuate immediately if told to; never drive around barricades or through flood waters."
+        }
+      ],
+      "completion": [
+        "Confirm how you’ll receive evacuation instructions and that everyone knows the plan for leaving."
+      ],
+      "maintenance": "Review before seasonal hazards and when your routes or destinations change.",
+      "escalation": "Call 911 if you are trapped or in immediate danger.",
+      "site_confirmation_required": false
+    }
+  ]
+}

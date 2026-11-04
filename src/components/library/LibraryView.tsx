@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Library, RotateCcw, Search, X } from "lucide-react";
+import { Check, Library, RotateCcw, Search, X } from "lucide-react";
 import {
   useDeferredValue,
   useEffect,
@@ -9,52 +9,32 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Button,
-  cx,
-  Field,
-  Input,
-  Modal,
-  PageHeader,
-  Select,
-} from "@/components/ui";
+import { Button, cx, Input, Modal, PageHeader } from "@/components/ui";
 import {
   browse,
   PAGE_SIZE,
   readParams,
-  type Collection,
-  type Filters,
+  RETIRED_PARAMS,
 } from "@/lib/library/browse";
-import { formatDate, STATUS_LABEL, STATUS_PARAM } from "@/lib/library/format";
-import { useGuidance, useReviewsIndex } from "@/lib/library/load";
+import { formatDate } from "@/lib/library/format";
+import { useGuidance } from "@/lib/library/load";
 import { buildIndex, type Indexed } from "@/lib/library/search";
-import type {
-  DisplayStatus,
-  EntryBase,
-  LibrarySource,
-  LibraryTopic,
-} from "@/lib/library/types";
+import type { GuidanceEntry, LibraryTopic } from "@/lib/library/types";
 import { setParams, useSearch } from "@/lib/url-state";
 import {
-  BookReviewDetail,
   GuidanceDetail,
   LoadError,
   StatusBadge,
   UnavailableBody,
 } from "./LibraryDetail";
+import { primaryTopic, topicStyle, TopicLabel } from "./topics";
 
 /*
- * Read-only Library: authority-supported guidance by default, with book
- * reviews as a separate research collection. All state lives in the URL
- * (view, q, topic, book, status, entry). Nothing here touches household data.
+ * Read-only household Library: authority-supported guidance. All state lives
+ * in the URL (q, topic, entry). Book reviews are a private research archive;
+ * links to the retired Book reviews collection fall back to Guidance with a
+ * notice. Nothing here touches household data.
  */
-
-const BOOK_STATUSES: DisplayStatus[] = [
-  "verified_principle",
-  "source_reference",
-  "needs_review",
-  "unavailable",
-];
 
 const NO_TOPICS: LibraryTopic[] = [];
 
@@ -64,29 +44,51 @@ function Pill({
   pressed,
   disabled,
   onClick,
+  topicId,
   children,
 }: {
   pressed: boolean;
   disabled?: boolean;
   onClick: () => void;
+  /** Topic accent; omitted for the neutral All topics pill. */
+  topicId?: string;
   children: ReactNode;
 }) {
+  const s = topicId ? topicStyle(topicId) : null;
+  const Icon = s?.icon;
   return (
     <button
       type="button"
       aria-pressed={pressed}
       disabled={disabled}
       onClick={onClick}
+      data-topic={topicId}
       className={cx(
-        "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber sm:min-h-9",
+        "inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-full border px-3.5 text-left text-sm outline-offset-2 focus-visible:ring-2 focus-visible:ring-amber sm:min-h-9",
         pressed
-          ? "border-copper-light/70 bg-copper/15 font-medium text-ivory"
-          : "border-line text-ivory-dim hover:border-line-strong hover:text-ivory",
-        disabled && "cursor-not-allowed opacity-40 hover:border-line",
+          ? cx(
+              "font-medium text-ivory outline-2 outline-solid",
+              s
+                ? s.selected
+                : "border-copper-light/70 bg-copper/15 outline-copper-light/50",
+            )
+          : cx(
+              "text-ivory-dim hover:text-ivory",
+              s ? s.pill : "border-line hover:border-line-strong",
+            ),
+        disabled && "cursor-not-allowed opacity-40",
       )}
     >
       {pressed && (
-        <span aria-hidden className="size-1.5 rounded-full bg-copper-light" />
+        <Check
+          size={14}
+          aria-hidden
+          strokeWidth={3}
+          className={cx("shrink-0", s ? s.text : "text-copper-light")}
+        />
+      )}
+      {Icon && !pressed && (
+        <Icon size={14} aria-hidden className={cx("shrink-0", s.text)} />
       )}
       {children}
     </button>
@@ -96,26 +98,33 @@ function Pill({
 function EntryCard({
   entry,
   topics,
-  sourceTitle,
   onOpen,
 }: {
-  entry: EntryBase;
+  entry: GuidanceEntry;
   topics: LibraryTopic[];
-  sourceTitle: string;
   onOpen: () => void;
 }) {
-  const topicLabels = entry.topic_ids
-    .map((id) => topics.find((t) => t.id === id)?.label ?? id)
-    .join(", ");
+  const topic = primaryTopic(entry.topic_ids);
+  const others = entry.topic_ids.filter((t) => t !== topic);
   return (
     <li className="min-w-0">
       <button
         type="button"
         data-entry-id={entry.id}
+        data-topic={topic}
         aria-haspopup="dialog"
         onClick={onOpen}
-        className="surface flex h-full w-full flex-col items-start gap-2 p-4 text-left outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-amber"
+        className={cx(
+          "surface flex h-full w-full flex-col items-start gap-2 border-l-4 p-4 text-left outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-amber",
+          topicStyle(topic).card,
+        )}
       >
+        <span className="flex flex-wrap gap-x-3 gap-y-1">
+          <TopicLabel id={topic} topics={topics} />
+          {others.map((t) => (
+            <TopicLabel key={t} id={t} topics={topics} />
+          ))}
+        </span>
         <span className="text-[15px] leading-snug font-medium [overflow-wrap:anywhere] text-ivory">
           {entry.title}
         </span>
@@ -126,116 +135,78 @@ function EntryCard({
         )}
         <span className="mt-auto flex flex-col items-start gap-1.5 pt-1">
           <StatusBadge status={entry.status} />
-          <span className="text-xs text-slate">
-            {topicLabels}
-            {" · "}
-            {sourceTitle}
-            {entry.reviewed_on && (
-              <> · Reviewed {formatDate(entry.reviewed_on)}</>
-            )}
-          </span>
+          {entry.reviewed_on && (
+            <span className="text-xs text-slate">
+              Reviewed {formatDate(entry.reviewed_on)}
+            </span>
+          )}
         </span>
       </button>
     </li>
   );
 }
 
-/** Search index for a loaded collection, built once per payload. */
+/** Search index for the loaded guidance, built once per payload. */
 function useEntryIndex(
-  data: { entries: EntryBase[]; topics: LibraryTopic[] } | null,
-): Indexed<EntryBase>[] {
+  data: { entries: GuidanceEntry[]; topics: LibraryTopic[] } | null,
+): Indexed<GuidanceEntry>[] {
   return useMemo(
-    () => (data ? buildIndex<EntryBase>(data.entries, data.topics) : []),
+    () => (data ? buildIndex<GuidanceEntry>(data.entries, data.topics) : []),
     [data],
   );
 }
 
 function useBrowse(
-  index: Indexed<EntryBase>[],
+  index: Indexed<GuidanceEntry>[],
   topics: LibraryTopic[],
   query: string,
   topic: string | null,
-  book: string | null,
-  status: DisplayStatus | null,
 ) {
   return useMemo(
-    () => browse(index, topics, query, { topic, book, status }),
-    [index, topics, query, topic, book, status],
+    () => browse(index, topics, query, { topic }),
+    [index, topics, query, topic],
   );
 }
 
-type Detail =
-  | { kind: "guidance"; id: string }
-  | { kind: "book"; id: string }
-  | { kind: "loading" }
-  | { kind: "error"; message: string; retry: () => void }
-  | { kind: "unavailable" };
-
 export function LibraryView() {
-  const params = readParams(useSearch());
+  const search = useSearch();
+  const params = readParams(search);
+  const notice = search.get("notice") === "reviews";
   const guidance = useGuidance();
-  const guidanceEntry = params.entry
+  const entry = params.entry
     ? guidance.data?.entries.find((e) => e.id === params.entry)
     : undefined;
-  // The review index loads on entering Book reviews, or to resolve a direct
-  // link to an entry that isn't core guidance.
-  const needIndex =
-    params.view === "reviews" ||
-    (!!params.entry && guidance.status !== "loading" && !guidanceEntry);
-  const index = useReviewsIndex(needIndex);
-  const bookEntry =
-    params.entry && !guidanceEntry
-      ? index.data?.entries.find((e) => e.id === params.entry)
-      : undefined;
 
-  // A book entry always shows in its own collection, never as guidance.
-  const view: Collection = bookEntry ? "reviews" : params.view;
+  // A link to the retired Book reviews collection becomes a plain Guidance
+  // link (kept in the URL, so refresh shows the same notice).
   useEffect(() => {
-    if (bookEntry && params.view !== "reviews") setParams({ view: "reviews" });
-  }, [bookEntry, params.view]);
+    if (!params.retiredReviews) return;
+    const sp = new URLSearchParams(window.location.search);
+    const bookEntry = sp.has("entry") && readParams(sp).entry === null;
+    setParams({
+      ...Object.fromEntries(RETIRED_PARAMS.map((k) => [k, null])),
+      ...(bookEntry ? { entry: null } : {}),
+      notice: "reviews",
+    });
+  }, [params.retiredReviews]);
 
-  const active = view === "guidance" ? guidance : index;
-  const topics = active.data?.topics ?? NO_TOPICS;
-  const sources: LibrarySource[] =
-    view === "guidance"
-      ? guidance.data
-        ? [guidance.data.source]
-        : []
-      : (index.data?.sources ?? []);
-  const sourceTitle = (id: string) =>
-    id === "CORE"
-      ? "HomePrep authoritative core"
-      : (sources.find((s) => s.id === id)?.title ?? id);
+  const topics = guidance.data?.topics ?? NO_TOPICS;
+  const index = useEntryIndex(guidance.data);
 
-  const guidanceIndex = useEntryIndex(guidance.data);
-  const reviewsIndex = useEntryIndex(index.data);
-  const searchIndex = view === "guidance" ? guidanceIndex : reviewsIndex;
-
-  const loaded = active.status === "ready";
+  const loaded = guidance.status === "ready";
   const topicOk =
     !params.topic || !loaded || topics.some((t) => t.id === params.topic);
-  const bookOk =
-    view !== "reviews" ||
-    !params.book ||
-    !loaded ||
-    sources.some((s) => s.id === params.book);
-  const filters: Filters = {
-    topic: topicOk ? params.topic : null,
-    book: view === "reviews" && bookOk ? params.book : null,
-    status: view === "reviews" ? params.status : null,
-  };
+  const topic = topicOk ? params.topic : null;
   const invalid = [
     ...params.invalid.filter((k) => k !== "entry"),
     ...(topicOk ? [] : ["topic"]),
-    ...(bookOk ? [] : ["book"]),
   ];
 
   const query = useDeferredValue(params.q);
-  const { topic, book, status } = filters;
-  const result = useBrowse(searchIndex, topics, query, topic, book, status);
+  const result = useBrowse(index, topics, query, topic);
 
   // Pagination restarts whenever the result set changes.
-  const pageKey = [view, query, topic, book, status].join("|");
+  const pageKey = [query, topic].join("|");
   const [page, setPage] = useState({ key: "", n: PAGE_SIZE });
   const shownCount = page.key === pageKey ? page.n : PAGE_SIZE;
   const shown = result.results.slice(0, shownCount);
@@ -266,127 +237,50 @@ export function LibraryView() {
     document.querySelector<HTMLElement>(`[data-entry-id="${id}"]`)?.focus();
   }, [hasEntry]);
 
+  type Detail =
+    | { kind: "guidance" }
+    | { kind: "loading" }
+    | { kind: "error" }
+    | { kind: "unavailable" };
   let detail: Detail | null = null;
   if (params.invalid.includes("entry")) detail = { kind: "unavailable" };
   else if (params.entry) {
-    if (guidanceEntry) detail = { kind: "guidance", id: guidanceEntry.id };
-    else if (bookEntry) detail = { kind: "book", id: bookEntry.id };
-    else if (guidance.status === "loading" || index.status === "loading")
-      detail = { kind: "loading" };
-    else if (index.status === "error")
-      detail = { kind: "error", message: index.error, retry: index.retry };
-    else if (guidance.status === "error" && index.status === "ready")
-      detail = {
-        kind: "error",
-        message: guidance.error,
-        retry: guidance.retry,
-      };
+    if (entry) detail = { kind: "guidance" };
+    else if (guidance.status === "loading") detail = { kind: "loading" };
+    else if (guidance.status === "error") detail = { kind: "error" };
     else detail = { kind: "unavailable" };
   }
 
-  function chooseView(next: Collection) {
-    if (next === view) return;
-    setParams(
-      {
-        view: next === "guidance" ? null : next,
-        book: null,
-        status: null,
-        entry: null,
-      },
-      { push: true },
-    );
-  }
   const resetFilters = () =>
     setParams({
       topic: null,
-      book: null,
-      status: null,
       ...Object.fromEntries(invalid.map((k) => [k, null])),
     });
   const clearSearch = () => setParams({ q: null });
-  const filtered = !!(params.topic || params.book || params.status);
-
-  const intro =
-    view === "guidance" ? (
-      <p>
-        Authority-supported guidance: checked against the cited sources, with
-        HomePrep editorial applications. Quantities are an{" "}
-        <strong className="text-ivory">example plan for five people</strong>,
-        not your household; household completion isn’t assessed.
-        {guidance.data && guidance.data.scenario.notes.length > 0 && (
-          <span className="mt-1 block text-xs text-slate">
-            Example scenario:{" "}
-            {guidance.data.scenario.people !== null &&
-              `${guidance.data.scenario.people} people · `}
-            {guidance.data.scenario.notes
-              .map((n) => `${n.label}: ${n.value}`)
-              .join(" · ")}
-          </span>
-        )}
-      </p>
-    ) : (
-      <p>
-        Research records from examined books, kept separate from guidance. Many
-        include unresolved claims: every record keeps its review label, and book
-        material is not approved instructions.
-      </p>
-    );
-
-  const modalTitle =
-    detail?.kind === "guidance"
-      ? (guidanceEntry?.title ?? "")
-      : detail?.kind === "book"
-        ? (bookEntry?.title ?? "")
-        : detail?.kind === "unavailable"
-          ? "Entry unavailable"
-          : "Library entry";
+  const filtered = !!params.topic;
+  const detailTopic = entry ? primaryTopic(entry.topic_ids) : undefined;
 
   return (
     <div>
-      <PageHeader
-        title="Library"
-        sub="Read-only reference. Reading never changes your household plan, tasks or readiness."
-      />
+      <PageHeader title="Library" />
 
-      <div
-        role="group"
-        aria-label="Collection"
-        className="mb-3 inline-flex flex-wrap gap-1 rounded-xl border border-line bg-well p-1"
-      >
-        {(
-          [
-            ["guidance", "Guidance", Library, guidance.data?.entries.length],
-            ["reviews", "Book reviews", BookOpen, index.data?.entries.length],
-          ] as const
-        ).map(([key, label, Icon, count]) => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={view === key}
-            onClick={() => chooseView(key)}
-            className={cx(
-              "flex min-h-11 items-center gap-2 rounded-lg px-3.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-amber sm:min-h-9",
-              view === key
-                ? "bg-white/[0.07] font-medium text-ivory shadow-[inset_0_-2px_0_var(--color-copper-light)]"
-                : "text-sage hover:text-ivory",
-            )}
+      {notice && (
+        <div
+          role="status"
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-well px-3 py-2 text-sm text-ivory-dim"
+        >
+          Book reviews are no longer part of the household Library. You’re
+          viewing Guidance.
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={X}
+            onClick={() => setParams({ notice: null })}
           >
-            <Icon
-              size={16}
-              aria-hidden
-              className={view === key ? "text-copper-light" : "text-slate"}
-            />
-            {label}
-            {count !== undefined && (
-              <span className="text-xs text-slate">{fmt(count)}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-4 max-w-3xl text-sm leading-relaxed text-ivory-dim">
-        {intro}
-      </div>
+            Dismiss
+          </Button>
+        </div>
+      )}
 
       {invalid.length > 0 && (
         <div
@@ -401,27 +295,23 @@ export function LibraryView() {
         </div>
       )}
 
-      {active.status === "error" ? (
+      {guidance.status === "error" ? (
         <LoadError
-          message={active.error}
-          onRetry={active.retry}
-          what={view === "guidance" ? "guidance" : "book review index"}
+          message={guidance.error}
+          onRetry={guidance.retry}
+          what="guidance"
         />
-      ) : active.status !== "ready" ? (
+      ) : guidance.status !== "ready" ? (
         <p role="status" className="surface px-4 py-8 text-center text-sm">
-          <span className="text-sage">
-            {view === "guidance"
-              ? "Loading guidance…"
-              : "Loading book reviews…"}
-          </span>
+          <span className="text-sage">Loading guidance…</span>
         </p>
       ) : (
         <>
-          {active.data.rejected > 0 && (
+          {guidance.data.rejected > 0 && (
             <p role="status" className="mb-3 text-xs text-amber">
-              {fmt(active.data.rejected)} record
-              {active.data.rejected === 1 ? "" : "s"} failed validation and
-              {active.data.rejected === 1 ? " isn’t" : " aren’t"} shown.
+              {fmt(guidance.data.rejected)} record
+              {guidance.data.rejected === 1 ? "" : "s"} failed validation and
+              {guidance.data.rejected === 1 ? " isn’t" : " aren’t"} shown.
             </p>
           )}
 
@@ -430,11 +320,7 @@ export function LibraryView() {
               icon={Search}
               type="search"
               aria-label="Search the Library"
-              placeholder={
-                view === "guidance"
-                  ? "Search guidance — try “boil water”"
-                  : "Search book reviews"
-              }
+              placeholder="Search guidance — try “boil water”"
               value={params.q}
               onChange={(e) => setParams({ q: e.target.value || null })}
               autoComplete="off"
@@ -448,18 +334,16 @@ export function LibraryView() {
               aria-label="Topic"
               className="flex flex-wrap gap-2"
             >
-              <Pill
-                pressed={!filters.topic}
-                onClick={() => setParams({ topic: null })}
-              >
+              <Pill pressed={!topic} onClick={() => setParams({ topic: null })}>
                 All topics
               </Pill>
               {result.topics.map((t) => {
                 const n = result.topicCounts.get(t.id) ?? 0;
-                const pressed = filters.topic === t.id;
+                const pressed = topic === t.id;
                 return (
                   <Pill
                     key={t.id}
+                    topicId={t.id}
                     pressed={pressed}
                     disabled={n === 0 && !pressed}
                     onClick={() => setParams({ topic: pressed ? null : t.id })}
@@ -470,55 +354,13 @@ export function LibraryView() {
                 );
               })}
             </div>
-
-            {view === "reviews" && (
-              <div className="grid gap-3 sm:max-w-2xl sm:grid-cols-2">
-                <Field label="Book">
-                  <Select
-                    value={filters.book ?? ""}
-                    onChange={(e) =>
-                      setParams({ book: e.target.value || null })
-                    }
-                    className="h-11"
-                  >
-                    <option value="">All books</option>
-                    {sources.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.title} ({fmt(result.bookCounts.get(s.id) ?? 0)})
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Review status">
-                  <Select
-                    value={filters.status ? STATUS_PARAM[filters.status] : ""}
-                    onChange={(e) =>
-                      setParams({ status: e.target.value || null })
-                    }
-                    className="h-11"
-                  >
-                    <option value="">All review statuses</option>
-                    {BOOK_STATUSES.filter(
-                      (s) =>
-                        s !== "unavailable" ||
-                        index.data?.entries.some((e) => e.status === s),
-                    ).map((s) => (
-                      <option key={s} value={STATUS_PARAM[s]}>
-                        {STATUS_LABEL[s]} (
-                        {fmt(result.statusCounts.get(s) ?? 0)})
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-            )}
           </div>
 
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p aria-live="polite" className="text-xs text-sage">
               {result.results.length === result.total
-                ? `${fmt(result.total)} ${view === "guidance" ? "guidance entries" : "book review records"}`
-                : `${fmt(result.results.length)} of ${fmt(result.total)} ${view === "guidance" ? "guidance entries" : "book review records"} match`}
+                ? `${fmt(result.total)} guidance entries`
+                : `${fmt(result.results.length)} of ${fmt(result.total)} guidance entries match`}
               {shown.length < result.results.length &&
                 ` · showing ${fmt(shown.length)}`}
             </p>
@@ -541,8 +383,8 @@ export function LibraryView() {
             <div className="surface flex flex-col items-center gap-3 px-4 py-8 text-center">
               <p className="text-sm text-ivory-dim">
                 {params.q
-                  ? `No ${view === "guidance" ? "guidance" : "book reviews"} match “${params.q}”${filtered ? " with these filters" : ""}.`
-                  : "No entries match these filters."}
+                  ? `No guidance matches “${params.q}”${filtered ? " with this topic" : ""}.`
+                  : "No entries match this topic."}
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 {params.q && (
@@ -564,7 +406,6 @@ export function LibraryView() {
                   key={e.id}
                   entry={e}
                   topics={topics}
-                  sourceTitle={sourceTitle(e.source_id)}
                   onOpen={() => openEntry(e.id)}
                 />
               ))}
@@ -586,23 +427,25 @@ export function LibraryView() {
         </>
       )}
 
-      <Modal open={!!detail} onClose={closeEntry} title={modalTitle} wide>
-        {detail?.kind === "guidance" && guidanceEntry && guidance.data && (
-          <GuidanceDetail
-            entry={guidanceEntry}
-            topics={guidance.data.topics}
-            evidence={guidance.data.evidence}
-          />
-        )}
-        {detail?.kind === "book" && bookEntry && index.data && (
-          <BookReviewDetail
-            key={bookEntry.id}
-            entry={bookEntry}
-            source={index.data.sources.find(
-              (s) => s.id === bookEntry.source_id,
-            )}
-            topics={index.data.topics}
-          />
+      <Modal
+        open={!!detail}
+        onClose={closeEntry}
+        title={
+          detail?.kind === "guidance"
+            ? (entry?.title ?? "")
+            : detail?.kind === "unavailable"
+              ? "Entry unavailable"
+              : "Library entry"
+        }
+        eyebrow={
+          detail?.kind === "guidance" && (
+            <TopicLabel id={detailTopic} topics={topics} />
+          )
+        }
+        wide
+      >
+        {detail?.kind === "guidance" && entry && guidance.data && (
+          <GuidanceDetail entry={entry} evidence={guidance.data.evidence} />
         )}
         {detail?.kind === "loading" && (
           <p role="status" className="text-sm text-sage">
@@ -611,8 +454,8 @@ export function LibraryView() {
         )}
         {detail?.kind === "error" && (
           <LoadError
-            message={detail.message}
-            onRetry={detail.retry}
+            message={guidance.error ?? ""}
+            onRetry={guidance.retry}
             what="entry"
           />
         )}
