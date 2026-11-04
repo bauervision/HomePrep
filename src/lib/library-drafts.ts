@@ -6,6 +6,8 @@
  * are kept in the text. No draft carries completion or readiness credit.
  */
 
+import { isLibraryCategory } from "./goal-destinations";
+import type { LibraryCategoryId } from "./types";
 import { MAX_EXPLANATION, MAX_TITLE } from "./checklist";
 import { TOPIC_TASK_CATEGORY } from "./library/actions";
 import type { GuidanceEntry } from "./library/types";
@@ -17,6 +19,7 @@ export interface GoalDraft {
   explanation: string;
   notes: string;
   libraryEntryId: string;
+  libraryCategoryId: LibraryCategoryId;
 }
 
 const PROVENANCE =
@@ -90,6 +93,9 @@ export function taskDraftFromCard(e: GuidanceEntry): TaskDraft {
  */
 export function goalDraftFromCard(e: GuidanceEntry): GoalDraft {
   const more = "More on the Library card.";
+  const categoryId = e.topic_ids.find(isLibraryCategory);
+  if (!categoryId)
+    throw new Error("This card has no supported Library category.");
   return {
     title: clip(e.title, MAX_TITLE),
     explanation: fit([doneWhen(e)], MAX_EXPLANATION, more),
@@ -105,5 +111,6 @@ export function goalDraftFromCard(e: GuidanceEntry): GoalDraft {
       more,
     ),
     libraryEntryId: e.id,
+    libraryCategoryId: categoryId,
   };
 }

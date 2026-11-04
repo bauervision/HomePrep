@@ -42,7 +42,10 @@ describe("Library action mappings", () => {
       expect(def!.milestones).toContain(m.milestone);
     }
     const keys = OBJECTIVE_ESSENTIALS["72h"].map((d) => d.key);
-    for (const goal of Object.values(TOPIC_GOAL)) expect(keys).toContain(goal);
+    for (const [topic, goal] of Object.entries(TOPIC_GOAL)) {
+      if (topic === "shelter") expect(goal).toBe("library-shelter");
+      else expect(keys).toContain(goal);
+    }
     for (const c of Object.values(TOPIC_TASK_CATEGORY))
       expect(CATEGORIES as readonly string[]).toContain(c);
   });

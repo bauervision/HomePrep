@@ -10,17 +10,17 @@
 
 import type { GuidanceEntry } from "./types";
 
-/** Every draft goes to the 72-hour workspace; its goals cover every topic. */
+/** Library goal drafts start at 72 hours; the household can choose any milestone. */
 export const DRAFT_MILESTONE = "72h";
 
-/** Built-in goal (essential key) a topic's goal drafts are added to. */
+/** Initial destination key. Shelter is a household category, not Family plan. */
 export const TOPIC_GOAL: Record<string, string> = {
   water: "water",
   food: "food",
   power: "power",
   sanitation: "sanitation",
   communications: "comms",
-  shelter: "plan",
+  shelter: "library-shelter",
 };
 
 /** Task category a topic's task drafts start with (editable in the form). */

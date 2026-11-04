@@ -293,7 +293,7 @@ describe("Goal drafts from a Library card", () => {
     expect(id).toMatch(/^custom-/);
     expect(rec.custom).toMatchObject({
       milestone: "72h",
-      goal: "plan",
+      goal: "library-shelter",
       title: "Arrange an accessible backup place to stay",
       libraryEntryId: "HP-H02",
     });
@@ -302,7 +302,9 @@ describe("Goal drafts from a Library card", () => {
     await waitFor(() => expect(params().get("draft")).toBeNull());
     const row = await screen.findByTestId(`requirement-${id}`);
     expect(row.dataset.status).toBe("not-started");
-    fireEvent.click(document.getElementById(`req-toggle-${id}`)!);
+    const toggle = document.getElementById(`req-toggle-${id}`)!;
+    if (toggle.getAttribute("aria-expanded") !== "true")
+      fireEvent.click(toggle);
     expect(
       within(row)
         .getByRole("link", { name: "open it in the Library" })
@@ -359,7 +361,7 @@ describe("Library regression: saved work and destination", () => {
     first.unmount();
     goTo("/tasks/?draft=HP-C01");
     mount(<TasksPage />);
-    const existing = await screen.findByRole("button", {
+    const existing = await screen.findByRole("link", {
       name: "View existing task",
     });
     expect(dialog().textContent).toMatch(/Complete.*30 days/);
@@ -378,7 +380,7 @@ describe("Library regression: saved work and destination", () => {
     expect(existing).toBeTruthy();
   });
 
-  it("retains every goal field through an incompatible milestone and saves only in Communications", async () => {
+  it("retains every goal field and saves at 30 days in Communications", async () => {
     goTo("/goals/?milestone=72h&goal=comms&draft=HP-C04");
     mount(<GoalsPage />);
     const form = await screen.findByRole("form", { name: "New goal" });
@@ -391,6 +393,12 @@ describe("Library regression: saved work and destination", () => {
     fireEvent.change(field(form, "Notes (optional)"), {
       target: { value: "Use our backup contacts" },
     });
+    fireEvent.change(field(form, "Linked task (optional)"), {
+      target: { value: "seed72-lighting-comms" },
+    });
+    fireEvent.change(field(form, "Completed by"), {
+      target: { value: "task" },
+    });
     fireEvent.change(screen.getByLabelText("Milestone"), {
       target: { value: "30d" },
     });
@@ -401,17 +409,15 @@ describe("Library regression: saved work and destination", () => {
     expect(field(form, "Notes (optional)").value).toBe(
       "Use our backup contacts",
     );
+    expect(field(form, "Linked task (optional)").value).toBe(
+      "seed72-lighting-comms",
+    );
+    expect(field(form, "Completed by").value).toBe("task");
     expect(
-      (
-        within(form).getByRole("button", {
-          name: "Save goal",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
-    const before = snapshot();
-    fireEvent.submit(form);
-    expect(snapshot()).toBe(before);
-    fireEvent.click(screen.getByRole("button", { name: /Return to 72-hour/ }));
+      within(form).getByRole("option", {
+        name: "Verify emergency lighting and communications",
+      }),
+    ).toBeTruthy();
     fireEvent.click(within(form).getByRole("button", { name: "Save goal" }));
     await waitFor(() =>
       expect(
@@ -424,9 +430,11 @@ describe("Library regression: saved work and destination", () => {
       (r) => r.custom?.libraryEntryId === "HP-C04",
     )!;
     expect(rec.custom).toMatchObject({
-      milestone: "72h",
-      goal: "comms",
+      milestone: "30d",
+      goal: "library-communications",
       title: "Our school pickup check-in",
+      taskId: "seed72-lighting-comms",
+      method: "task",
     });
   });
 });
@@ -456,5 +464,140 @@ describe("Signed-in Library recognition", () => {
       within(dialog()).getByRole("link", { name: "Add another task" }),
     ).toBeTruthy();
     expect(snapshot()).toBe(before);
+  });
+});
+
+describe("Revised Library category destinations", () => {
+  it.each([
+    ["HP-H02", "7d", "library-shelter", "Shelter"],
+    ["HP-C04", "30d", "library-communications", "Communications"],
+  ])(
+    "saves %s at %s and reopens in %s after refresh",
+    async (cardId, milestone, destination, label) => {
+      goTo("/goals/?milestone=72h&draft=" + cardId);
+      const first = mount(<GoalsPage />);
+      const form = await screen.findByRole("form", { name: "New goal" });
+      const title = field(form, "Goal title").value;
+      const before = snapshot();
+      fireEvent.change(screen.getByLabelText("Milestone"), {
+        target: { value: milestone },
+      });
+      expect(snapshot()).toBe(before);
+      expect(field(form, "Goal title").value).toBe(title);
+      expect(
+        screen.getByText(
+          "Destination: " +
+            label +
+            " - " +
+            (milestone === "7d" ? "7 days" : "30 days"),
+        ),
+      ).toBeTruthy();
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+      await waitFor(() => expect(params().get("draft")).toBeNull());
+      const entries = Object.entries(state()).filter(
+        ([, r]) => r.custom?.libraryEntryId === cardId,
+      );
+      expect(entries).toHaveLength(1);
+      const [id, record] = entries[0];
+      expect(record.custom).toMatchObject({
+        title,
+        milestone,
+        goal: destination,
+      });
+      expect(record.confirmed).toBeUndefined();
+      expect(Object.keys(household().goalDestinations!)).toEqual([
+        milestone + ":" + destination,
+      ]);
+      expect(params().get("goal")).toBe(destination);
+      first.unmount();
+      mount(<GoalsPage />);
+      const row = await screen.findByTestId("requirement-" + id);
+      expect(row.textContent).toContain(title);
+      expect(row.dataset.status).toBe("not-started");
+      expect(screen.getByRole("heading", { name: label })).toBeTruthy();
+      expect(
+        within(row)
+          .getByRole("link", { name: "open it in the Library" })
+          .getAttribute("href"),
+      ).toBe("/library/?entry=" + cardId);
+    },
+  );
+
+  it("creates no destination on draft, milestone switch or cancel", async () => {
+    goTo("/goals/?milestone=72h&draft=HP-H02");
+    mount(<GoalsPage />);
+    const form = await screen.findByRole("form", { name: "New goal" });
+    const before = snapshot();
+    for (const milestone of ["7d", "30d", "60d", "90d"])
+      fireEvent.change(screen.getByLabelText("Milestone"), {
+        target: { value: milestone },
+      });
+    fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
+    expect(snapshot()).toBe(before);
+    expect(household().goalDestinations).toBeUndefined();
+  });
+});
+
+describe("Task link selection", () => {
+  it("reveals, focuses and highlights the exact completed 30-day row through filters and refresh", async () => {
+    fakeDb.set("households/h1/tasks/contact-30", {
+      title: "Our saved offline contacts",
+      notes: "Saved",
+      milestone: "30d",
+      category: "Communications",
+      status: "complete",
+      priority: 2,
+    });
+    fakeDb.set("households/h2/tasks/contact-30", {
+      title: "Another household secret",
+      milestone: "30d",
+      status: "complete",
+    });
+    goTo("/tasks/?milestone=72h&complete=hide&task=contact-30");
+    const scroll = vi.fn();
+    const previous = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scroll;
+    try {
+      const first = mount(<TasksPage />);
+      const button = await screen.findByRole("button", {
+        name: /Our saved offline contacts/,
+      });
+      await waitFor(() => expect(document.activeElement).toBe(button));
+      expect(scroll).toHaveBeenCalled();
+      expect(button.closest("li")?.dataset.highlighted).toBe("true");
+      expect(button.closest("li")?.dataset.taskId).toBe("contact-30");
+      expect(button.tagName).toBe("BUTTON"); // native Enter/Space activation
+      expect(
+        (screen.getByLabelText("Milestone") as HTMLSelectElement).value,
+      ).toBe("72h");
+      expect(
+        (screen.getByLabelText("Show complete") as HTMLInputElement).checked,
+      ).toBe(false);
+      expect(screen.queryByText("Another household secret")).toBeNull();
+      fireEvent.click(button);
+      expect(field(dialog(), "Task").value).toBe("Our saved offline contacts");
+      fireEvent.click(within(dialog()).getByRole("button", { name: "Cancel" }));
+      await waitFor(() => expect(document.activeElement).toBe(button));
+      first.unmount();
+      mount(<TasksPage />);
+      const restored = await screen.findByRole("button", {
+        name: /Our saved offline contacts/,
+      });
+      await waitFor(() => expect(document.activeElement).toBe(restored));
+      expect(restored.closest("li")?.dataset.highlighted).toBe("true");
+    } finally {
+      HTMLElement.prototype.scrollIntoView = previous;
+    }
+  });
+
+  it("shows a generic message for an unavailable task without reading another household", async () => {
+    fakeDb.set("households/h2/tasks/foreign", {
+      title: "Private foreign task",
+    });
+    goTo("/tasks/?task=foreign");
+    mount(<TasksPage />);
+    await screen.findByText("That task is unavailable in this household.");
+    expect(screen.queryByText("Private foreign task")).toBeNull();
   });
 });

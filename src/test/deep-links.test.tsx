@@ -449,9 +449,14 @@ describe("goal detail", () => {
 });
 
 describe("task deep link", () => {
-  it("opens the existing task for editing and clears the link on close", async () => {
+  it("reveals the task row, opens its editor and retains the stable selection on close", async () => {
     goTo("/tasks/?task=seed72-water");
     mount(<TasksPage />);
+    const row = await screen.findByRole("button", {
+      name: /Store 3 days of potable water/,
+    });
+    await waitFor(() => expect(document.activeElement).toBe(row));
+    fireEvent.click(row);
     const d = await screen.findByRole("dialog");
     set(within(d).getByLabelText("Status"), "in_progress");
     await act(async () => {
@@ -460,7 +465,9 @@ describe("task deep link", () => {
     expect(fakeDb.get("households/h1/tasks/seed72-water")).toMatchObject({
       status: "in_progress",
     });
-    expect(window.location.search).toBe("");
+    expect(new URLSearchParams(window.location.search).get("task")).toBe(
+      "seed72-water",
+    );
   });
 });
 

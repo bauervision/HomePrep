@@ -544,6 +544,9 @@ describe("note to task", () => {
     });
     window.history.pushState({}, "", "/tasks/?task=t1");
     mount(<TasksPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Inspect fire extinguisher/ }),
+    );
     const d = await screen.findByRole("dialog");
     expect((within(d).getByLabelText("Task") as HTMLInputElement).value).toBe(
       "Inspect fire extinguisher",

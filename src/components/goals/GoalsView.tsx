@@ -47,7 +47,11 @@ import {
   relatedTasks,
   saveTargetOverride,
 } from "@/lib/goals";
-import { TOPIC_GOAL } from "@/lib/library/actions";
+import { libraryDestination } from "@/lib/goal-destinations";
+import {
+  categoryGoalView,
+  householdCategoryGoals,
+} from "@/lib/household-goal-view";
 import { useGuidance } from "@/lib/library/load";
 import { goalDraftFromCard, type GoalDraft } from "@/lib/library-drafts";
 import { useObjective } from "@/lib/objective";
@@ -60,7 +64,6 @@ import {
   measureInventory,
   milestoneByKey,
   MILESTONES,
-  OBJECTIVE_ESSENTIALS,
   objectiveEssentials,
   type Essential,
 } from "@/lib/readiness";
@@ -151,18 +154,33 @@ export function GoalsView({
   const profile = useMemo(() => resolveProfile(household), [household]);
 
   const essentials = useMemo(
-    () => objectiveEssentials(milestone, inv.data, tasks.data, plan, today),
-    [milestone, inv.data, tasks.data, plan, today],
+    () => [
+      ...objectiveEssentials(milestone, inv.data, tasks.data, plan, today),
+      ...householdCategoryGoals(
+        household,
+        milestone,
+        inv.data,
+        tasks.data,
+        today,
+      ),
+    ],
+    [household, milestone, inv.data, tasks.data, plan, today],
   );
-  const intendedGoal = card?.topic_ids.map((t) => TOPIC_GOAL[t]).find(Boolean);
-  const draftDestination = essentials.find((e) => e.key === intendedGoal);
-  const originalDestination = objectiveEssentials(
-    "72h",
-    inv.data,
-    tasks.data,
-    plan,
-    today,
-  ).find((e) => e.key === intendedGoal);
+  const destination = draft
+    ? libraryDestination(draft.libraryCategoryId, milestone)
+    : null;
+  const draftDestination =
+    draft && destination
+      ? (essentials.find((e) => e.key === destination.key) ??
+        categoryGoalView(
+          household,
+          draft.libraryCategoryId,
+          milestone,
+          inv.data,
+          tasks.data,
+          today,
+        ))
+      : null;
   const memoryKey = lastGoalKey(user.uid, household.id, milestone);
   const remembered =
     typeof window === "undefined" ? null : readLastGoal(memoryKey);
@@ -199,9 +217,16 @@ export function GoalsView({
             onChange={(ev) => {
               const next = ev.target.value as MilestoneKey;
               // Water and Food exist at every milestone: stay on them.
-              const keep = OBJECTIVE_ESSENTIALS[next].some(
-                (d) => d.key === selected?.key,
-              );
+              const keep = [
+                ...objectiveEssentials(next, inv.data, tasks.data, plan, today),
+                ...householdCategoryGoals(
+                  household,
+                  next,
+                  inv.data,
+                  tasks.data,
+                  today,
+                ),
+              ].some((d) => d.key === selected?.key);
               setParams({ milestone: next, goal: keep ? selected!.key : null });
             }}
           >
@@ -215,53 +240,25 @@ export function GoalsView({
       />
       <ErrorText>{inv.error || tasks.error}</ErrorText>
       {draftNote && <p role="status">{draftNote}</p>}
-      {draft && originalDestination && (
+      {draft && draftDestination && destination && (
         <Card title="New goal from the Library">
           <p className="mb-2 text-xs text-sage">
             Drafted from the Library card {draft.title}. Review before saving.
           </p>
           <p className="mb-2 text-xs text-sage">
-            Destination: {draftDestination?.label ?? originalDestination.label}{" "}
-            · {ms.label}
+            Destination: {destination.label} - {ms.label}
           </p>
-          {!draftDestination && (
-            <div className="mb-2 flex flex-wrap gap-2">
-              <Button
-                onClick={() =>
-                  setParams({ milestone: "72h", goal: intendedGoal! })
-                }
-              >
-                Return to 72-hour {originalDestination.label}
-              </Button>
-              {OBJECTIVE_ESSENTIALS["7d"].some(
-                (e) => e.key === intendedGoal,
-              ) && (
-                <Button
-                  onClick={() =>
-                    setParams({ milestone: "7d", goal: intendedGoal! })
-                  }
-                >
-                  Use 7-day {originalDestination.label}
-                </Button>
-              )}
-            </div>
-          )}
           <GoalForm
             key={draft.libraryEntryId}
-            essential={draftDestination ?? originalDestination}
-            blocked={
-              !draftDestination
-                ? "This milestone has no compatible destination for this Library card. Return to 72 hours to save in its intended category."
-                : null
-            }
+            essential={draftDestination}
             prefill={draft}
             items={inv.data}
             tasks={tasks.data}
-            related={relatedTasks(
-              draftDestination ?? originalDestination,
-              tasks.data,
-            )}
+            related={relatedTasks(draftDestination, tasks.data)}
             today={today}
+            onLibrarySaved={(goal, requirement) =>
+              setParams({ draft: null, milestone, goal, requirement })
+            }
             onDone={() => setParams({ draft: null })}
           />
         </Card>
@@ -334,7 +331,7 @@ export function GoalsView({
                 members={describeMembers(profile)}
                 today={today}
               />
-            ) : (
+            ) : draft ? null : (
               <Card>
                 <p className="py-4 text-center text-sm text-slate">
                   That goal isn’t part of this milestone.

@@ -14,6 +14,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   serverTimestamp,
   setDoc,
@@ -31,6 +32,12 @@ import {
 } from "vitest";
 const service = vi.hoisted(() => ({ database: null as unknown }));
 vi.mock("../src/lib/firebase", () => ({ db: () => service.database }));
+import { saveLibraryGoal } from "../src/lib/library-goals";
+import {
+  libraryDestination,
+  LIBRARY_CATEGORIES,
+} from "../src/lib/goal-destinations";
+import type { LibraryCategoryId, MilestoneKey } from "../src/lib/types";
 import { createLibraryTask } from "../src/lib/library-tasks";
 import { DEFAULT_TASK_DRAFT } from "../src/lib/tasks";
 
@@ -164,5 +171,106 @@ describe("Library task transaction against real emulator", () => {
     expect(
       (await getDocs(collection(db("alice"), "households/h1/tasks"))).docs,
     ).toHaveLength(2);
+  });
+});
+
+describe("Library household category destinations", () => {
+  it("saves every category/milestone with existing member authorization, retries and reuses destinations", async () => {
+    service.database = db("bob");
+    const milestones: MilestoneKey[] = ["72h", "7d", "30d", "60d", "90d"];
+    for (const category of Object.keys(
+      LIBRARY_CATEGORIES,
+    ) as LibraryCategoryId[]) {
+      for (const milestone of milestones) {
+        const id = "custom-" + category + "-" + milestone;
+        await assertSucceeds(
+          saveLibraryGoal(
+            "h1",
+            id,
+            category,
+            milestone,
+            "Reviewed plan",
+            "Observable outcome",
+            { libraryEntryId: "HP-C04" },
+          ),
+        );
+        await assertSucceeds(
+          saveLibraryGoal(
+            "h1",
+            id,
+            category,
+            milestone,
+            "Reviewed plan",
+            "Observable outcome",
+            { libraryEntryId: "HP-C04" },
+          ),
+        );
+      }
+    }
+    const snapshot = await getDoc(doc(db("bob"), "households/h1"));
+    expect(Object.keys(snapshot.data()!.requirementState)).toHaveLength(30);
+    const dest = libraryDestination("shelter", "7d");
+    expect(snapshot.data()!.goalDestinations[dest.storageKey]).toEqual({
+      categoryId: "shelter",
+      milestone: "7d",
+    });
+    expect(
+      snapshot.data()!.requirementState["custom-shelter-7d"].confirmed,
+    ).toBeUndefined();
+    const before = snapshot.data();
+    service.database = db("eve");
+    await assertFails(
+      saveLibraryGoal(
+        "h1",
+        "custom-foreign",
+        "communications",
+        "30d",
+        "No access",
+        "No access",
+        { libraryEntryId: "HP-C04" },
+      ),
+    );
+    service.database = env.unauthenticatedContext().firestore();
+    await assertFails(
+      saveLibraryGoal(
+        "h1",
+        "custom-anon",
+        "shelter",
+        "7d",
+        "No access",
+        "No access",
+        { libraryEntryId: "HP-H02" },
+      ),
+    );
+    expect((await getDoc(doc(db("bob"), "households/h1"))).data()).toEqual(
+      before,
+    );
+  });
+
+  it("creates one destination when two member sessions save distinct goals concurrently", async () => {
+    service.database = db("alice");
+    const first = saveLibraryGoal(
+      "h1",
+      "custom-concurrent-one",
+      "shelter",
+      "7d",
+      "First backup place",
+      "Accessible",
+      { libraryEntryId: "HP-H02" },
+    );
+    service.database = db("bob");
+    const second = saveLibraryGoal(
+      "h1",
+      "custom-concurrent-two",
+      "shelter",
+      "7d",
+      "Second backup place",
+      "Transport",
+      { libraryEntryId: "HP-H02" },
+    );
+    await Promise.all([first, second]);
+    const h = (await getDoc(doc(db("bob"), "households/h1"))).data()!;
+    expect(Object.keys(h.goalDestinations)).toEqual(["7d:library-shelter"]);
+    expect(Object.keys(h.requirementState)).toHaveLength(2);
   });
 });

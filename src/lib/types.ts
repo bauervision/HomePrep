@@ -89,6 +89,15 @@ export interface RequirementRecord {
 }
 export type RequirementState = Record<string, RequirementRecord>;
 
+/** Stable Library categories; independent of inventory and built-in goal names. */
+export type LibraryCategoryId =
+  "water" | "food" | "power" | "sanitation" | "communications" | "shelter";
+
+export interface HouseholdGoalDestination {
+  milestone: MilestoneKey;
+  categoryId: LibraryCategoryId;
+}
+
 /**
  * Baseline acknowledgments, keyed by `${milestone}.${goal}`: the version of
  * the goal's recommendations the household reviewed. A version number, not a
@@ -116,6 +125,8 @@ export interface Household {
   profileVersion?: number;
   targetOverrides?: TargetOverrides;
   requirementState?: RequirementState;
+  /** Household-only category destinations, created atomically with their first goal. */
+  goalDestinations?: Record<string, HouseholdGoalDestination>;
   baselineReviews?: BaselineReviews;
   createdAt?: Timestamp;
   /** Owner invitation the household was founded from (0.7.0 and later). */

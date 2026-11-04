@@ -369,7 +369,7 @@ describe("Library: card actions", () => {
     await within(document.body).findByTestId("library-actions");
     expect(actionLinks()).toEqual([
       ["Create Task", "/tasks?draft=HP-H02"],
-      ["Create Goal", "/goals?milestone=72h&goal=plan&draft=HP-H02"],
+      ["Create Goal", "/goals?milestone=72h&goal=library-shelter&draft=HP-H02"],
     ]);
   });
 

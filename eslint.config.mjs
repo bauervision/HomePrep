@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local diagnostics and backed-up generated caches are not app source.
+    ".agent/**",
   ]),
 ]);
 

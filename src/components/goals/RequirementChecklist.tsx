@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useHousehold } from "@/components/SessionProvider";
 import {
   Badge,
@@ -50,6 +50,7 @@ import {
   type RecordChange,
   type RequirementStatus,
 } from "@/lib/checklist";
+import { saveLibraryGoal } from "@/lib/library-goals";
 import { updateRequirement } from "@/lib/goals";
 import { cardUrl } from "@/lib/library/actions";
 import type { GoalDraft } from "@/lib/library-drafts";
@@ -87,20 +88,26 @@ function useChange() {
   const { household } = useHousehold();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  async function run(id: string, change: () => RecordChange) {
+  const saving = useRef(false);
+  async function attempt(save: () => Promise<unknown>) {
+    if (saving.current) return false;
+    saving.current = true;
     setBusy(true);
     setError(null);
     try {
-      await updateRequirement(household.id, id, change());
+      await save();
       return true;
     } catch (err) {
       setError((err as Error).message);
       return false;
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
-  return { busy, error, run, setError };
+  const run = (id: string, change: () => RecordChange) =>
+    attempt(() => updateRequirement(household.id, id, change()));
+  return { busy, error, run, attempt, setError };
 }
 
 /** Applies two record changes in order. */
@@ -883,7 +890,7 @@ export function GoalForm({
   today,
   existing,
   prefill,
-  blocked,
+  onLibrarySaved,
   onDone,
 }: {
   essential: Essential;
@@ -894,7 +901,7 @@ export function GoalForm({
   existing?: EvaluatedRequirement;
   /** Starting values for a new goal (a Library draft). */
   prefill?: GoalDraft | null;
-  blocked?: string | null;
+  onLibrarySaved?: (goal: string, requirementId: string) => void;
   onDone: () => void;
 }) {
   const { household } = useHousehold();
@@ -911,16 +918,24 @@ export function GoalForm({
   const [notes, setNotesText] = useState(
     existing?.record?.notes ?? prefill?.notes ?? "",
   );
-  const { busy, error, run } = useChange();
+  const { busy, error, run, attempt } = useChange();
+  const [creationId] = useState(newCustomId);
 
   // The goal's related tasks first, then the rest of this milestone's.
   const others = tasks.filter(
     (t) => t.milestone === e.milestone && !related.includes(t),
   );
+  const selectedTask = tasks.find((t) => t.id === taskId);
+  const preservedTask =
+    selectedTask &&
+    !related.includes(selectedTask) &&
+    !others.includes(selectedTask)
+      ? selectedTask
+      : null;
 
   async function submit(ev: FormEvent) {
     ev.preventDefault();
-    if (busy || blocked) return;
+    if (busy) return;
     const options: CustomOptions = {
       method,
       taskId: taskId || null,
@@ -932,9 +947,27 @@ export function GoalForm({
             libraryEntryId: prefill?.libraryEntryId ?? null,
           }),
     };
+    if (!existing && prefill) {
+      const ok = await attempt(() =>
+        saveLibraryGoal(
+          household.id,
+          creationId,
+          prefill.libraryCategoryId,
+          e.milestone,
+          title,
+          explanation,
+          options,
+        ),
+      );
+      if (ok) {
+        if (onLibrarySaved) onLibrarySaved(e.key, creationId);
+        else onDone();
+      }
+      return;
+    }
     const ok = existing
       ? await run(existing.id, () => editCustom(title, explanation, options))
-      : await run(newCustomId(), () =>
+      : await run(creationId, () =>
           createCustom(
             household.requirementState,
             e.milestone,
@@ -954,11 +987,6 @@ export function GoalForm({
       className="space-y-2"
       aria-label={existing ? "Edit goal" : "New goal"}
     >
-      {blocked && (
-        <p role="alert" className="text-sm text-amber">
-          {blocked}
-        </p>
-      )}
       <Field label="Goal title">
         <Input
           value={title}
@@ -987,6 +1015,11 @@ export function GoalForm({
             }}
           >
             <option value="">No linked task</option>
+            {preservedTask && (
+              <optgroup label="Selected task">
+                <option value={preservedTask.id}>{preservedTask.title}</option>
+              </optgroup>
+            )}
             {related.length > 0 && (
               <optgroup label="Related tasks">
                 {related.map((t) => (
@@ -1047,7 +1080,7 @@ export function GoalForm({
           variant="emerald"
           icon={Save}
           loading={busy}
-          disabled={!!blocked || !title.trim()}
+          disabled={!title.trim()}
         >
           Save goal
         </Button>

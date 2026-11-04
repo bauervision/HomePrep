@@ -3,7 +3,7 @@
 import { Plus } from "lucide-react";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Comments } from "@/components/Comments";
 import { useHousehold } from "@/components/SessionProvider";
 import { TaskForm } from "@/components/TaskForm";
@@ -39,23 +39,18 @@ const PRIORITY_TONE = { 1: "bad", 2: "warn", 3: "neutral" } as const;
 export default function TasksPage() {
   const { household } = useHousehold();
   const { data, loading, error } = useTasks();
-  // Deep link: /tasks/?milestone=30d preselects that objective's tasks.
-  const [milestone, setMilestone] = useState<MilestoneKey | "all">(() => {
-    if (typeof window === "undefined") return "all";
-    const m = new URLSearchParams(window.location.search).get("milestone");
-    return isMilestoneKey(m) ? m : "all";
-  });
-  const [showDone, setShowDone] = useState(true);
-  // Deep link: /tasks/?task=<id> opens that task (used by linked notes).
-  const [editing, setEditing] = useState<string | "new" | null>(() =>
-    typeof window === "undefined"
-      ? null
-      : new URLSearchParams(window.location.search).get("task"),
-  );
+  const params = useSearch();
+  const milestoneParam = params.get("milestone");
+  const milestone: MilestoneKey | "all" = isMilestoneKey(milestoneParam)
+    ? milestoneParam
+    : "all";
+  const showDone = params.get("complete") !== "hide";
+  const targetId = params.get("task");
+  const [editing, setEditing] = useState<string | "new" | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   // Deep link: /tasks/?draft=<card> opens a new task prefilled from a Library
   // card. Nothing is saved until the household creates it.
-  const draftId = useSearch().get("draft");
+  const draftId = params.get("draft");
   const guidance = useGuidance(!!draftId);
   const card = draftId
     ? (guidance.data?.entries.find((e) => e.id === draftId) ?? null)
@@ -70,10 +65,11 @@ export default function TasksPage() {
     () =>
       sortTasks(data).filter(
         (t) =>
-          (milestone === "all" || t.milestone === milestone) &&
-          (showDone || t.status !== "complete"),
+          t.id === targetId ||
+          ((milestone === "all" || t.milestone === milestone) &&
+            (showDone || t.status !== "complete")),
       ),
-    [data, milestone, showDone],
+    [data, milestone, showDone, targetId],
   );
   const current =
     editing && editing !== "new"
@@ -86,11 +82,21 @@ export default function TasksPage() {
     setParams({ draft: null });
   }
 
+  const target = data.find((t) => t.id === targetId);
+  const outsideFilters =
+    target &&
+    ((milestone !== "all" && target.milestone !== milestone) ||
+      (!showDone && target.status === "complete"));
+  const targetKey = target?.id;
+  useEffect(() => {
+    if (!targetKey || editing || draftId) return;
+    const el = document.getElementById(`task-open-${targetKey}`);
+    el?.scrollIntoView?.({ block: "center", behavior: "auto" });
+    el?.focus({ preventScroll: true });
+  }, [household.id, targetKey, loading, editing, draftId]);
+
   function closeTask() {
     setEditing(null);
-    // A deep-linked task (?task=) must not reopen on refresh.
-    if (new URLSearchParams(window.location.search).has("task"))
-      setParams({ task: null });
   }
 
   async function setStatus(t: Task, status: TaskStatus) {
@@ -128,7 +134,6 @@ export default function TasksPage() {
             value={milestone}
             onChange={(e) => {
               const next = e.target.value as MilestoneKey | "all";
-              setMilestone(next);
               // Keep the filter in the URL so refresh preserves it.
               setParams({ milestone: next === "all" ? null : next });
             }}
@@ -144,12 +149,24 @@ export default function TasksPage() {
             <input
               type="checkbox"
               checked={showDone}
-              onChange={(e) => setShowDone(e.target.checked)}
+              onChange={(e) =>
+                setParams({ complete: e.target.checked ? null : "hide" })
+              }
             />
             Show complete
           </label>
         </div>
         <ErrorText>{error || rowError}</ErrorText>
+        {!loading && !error && targetId && !target && (
+          <p role="status" className="mb-3 text-sm text-sage">
+            That task is unavailable in this household.
+          </p>
+        )}
+        {outsideFilters && (
+          <p role="status" className="mb-3 text-xs text-sage">
+            Showing the linked task outside your filters.
+          </p>
+        )}
         {loading ? (
           <Empty>Loading…</Empty>
         ) : rows.length === 0 ? (
@@ -157,13 +174,26 @@ export default function TasksPage() {
         ) : (
           <ul className="divide-y divide-line">
             {rows.map((t) => (
-              <li key={t.id} className="flex items-center gap-2 py-2">
+              <li
+                key={t.id}
+                data-task-id={t.id}
+                data-highlighted={t.id === targetId || undefined}
+                className={cx(
+                  "flex scroll-mt-24 items-center gap-2 rounded-md py-2",
+                  t.id === targetId && "bg-amber/10 px-2 ring-2 ring-amber",
+                )}
+              >
                 <Badge tone={PRIORITY_TONE[t.priority]}>
                   {PRIORITY_LABEL[t.priority]}
                 </Badge>
                 <button
                   type="button"
-                  onClick={() => setEditing(t.id)}
+                  id={`task-open-${t.id}`}
+                  aria-current={t.id === targetId ? "true" : undefined}
+                  onClick={() => {
+                    setParams({ task: t.id });
+                    setEditing(t.id);
+                  }}
                   className="min-w-0 flex-1 text-left"
                 >
                   <span
@@ -208,14 +238,24 @@ export default function TasksPage() {
           <div className="mb-3 space-y-2">
             {existingCardTasks.map((t) => (
               <div key={t.id}>
-                <Button
-                  onClick={() => {
-                    closeDraft();
-                    setEditing(t.id);
+                <Link
+                  href={`/tasks/?task=${encodeURIComponent(t.id)}`}
+                  className="btn btn-secondary h-10 px-4 text-sm"
+                  onClick={(event) => {
+                    if (
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.shiftKey ||
+                      event.altKey
+                    )
+                      return;
+                    event.preventDefault();
+                    setAnotherCard(null);
+                    setParams({ draft: null, task: t.id }, { push: true });
                   }}
                 >
                   View existing task
-                </Button>
+                </Link>
                 <p className="text-sm">
                   {t.title} · {TASK_STATUS_LABEL[t.status]} ·{" "}
                   {MILESTONES.find((m) => m.key === t.milestone)?.label}
@@ -272,7 +312,7 @@ export default function TasksPage() {
         )}
       </Modal>
       <Modal
-        // A deep-linked task that no longer exists simply leaves the modal closed.
+        // Editing is explicit; task deep links reveal/focus their row first.
         open={editing === "new" || current !== null}
         onClose={closeTask}
         title={editing === "new" ? "New task" : "Task"}
